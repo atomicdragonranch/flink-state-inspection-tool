@@ -7,7 +7,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -81,8 +83,47 @@ public class DockerStorageConnector extends StorageConnector {
     public boolean validateCheckpoint(String checkpointPath) {
         String[] parsed = parseDockerUri(checkpointPath);
         List<String> result = execInContainer(
-            parsed[0], "test", "-f", parsed[1] + "/_metadata", "&&", "echo", "ok");
+            parsed[0], "sh", "-c", "test -f '" + parsed[1] + "/_metadata' && echo ok");
         return result.stream().anyMatch(line -> line.contains("ok"));
+    }
+
+    @Override
+    public InputStream readMetadataFile(String checkpointPath) throws IOException {
+        String localDir = resolveMetadataPath(checkpointPath);
+        return new FileInputStream(new File(localDir, "_metadata"));
+    }
+
+    @Override
+    public String resolveMetadataPath(String checkpointPath) throws IOException {
+        String[] parsed = parseDockerUri(checkpointPath);
+        String container = parsed[0];
+        String containerMetadataPath = parsed[1] + "/_metadata";
+
+        if (tempDir == null) {
+            tempDir = Files.createTempDirectory("flink-state-inspector-");
+        }
+        Path localDir = tempDir.resolve("chk-" + UUID.randomUUID().toString().substring(0, 8));
+        Files.createDirectories(localDir);
+        Path localFile = localDir.resolve("_metadata");
+        dockerCp(container, containerMetadataPath, localFile.toString());
+        LOG.info("Copied _metadata from {}:{} to {}", container, containerMetadataPath, localDir);
+        return localDir.toString();
+    }
+
+    @Override
+    public String resolveFullCheckpoint(String checkpointPath) throws IOException {
+        String[] parsed = parseDockerUri(checkpointPath);
+        String container = parsed[0];
+        String containerPath = parsed[1];
+
+        if (tempDir == null) {
+            tempDir = Files.createTempDirectory("flink-state-inspector-");
+        }
+        Path localDir = tempDir.resolve("full-chk-" + UUID.randomUUID().toString().substring(0, 8));
+        Files.createDirectories(localDir);
+        dockerCp(container, containerPath + "/.", localDir.toString());
+        LOG.info("Copied full checkpoint from {}:{} to {}", container, containerPath, localDir);
+        return localDir.toString();
     }
 
     @Override

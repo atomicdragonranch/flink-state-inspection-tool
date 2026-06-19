@@ -19,6 +19,16 @@ Thumbs.db
 
 # Working artifacts
 claude-artifacts/
+test-checkpoint/
+rocksdb-check/
+QuickTest.java
+RocksTest.java
+SstTest.java
+
+# Node / UI
+ui/node_modules/
+ui/dist/
+src/main/resources/public/
 
 # Env
 .env

@@ -2,6 +2,8 @@ package io.flinkstate.inspector.storage;
 
 import io.flinkstate.inspector.discovery.CheckpointEntry;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 
@@ -53,6 +55,36 @@ public abstract class StorageConnector implements AutoCloseable {
      * @return path that Flink's FileSystem API can open
      */
     public abstract String resolveForFlink(String path);
+
+    /**
+     * Open an InputStream for the _metadata file inside the given checkpoint directory.
+     * Callers are responsible for closing the returned stream.
+     *
+     * @param checkpointPath path to a specific checkpoint (e.g., basePath/jobId/chk-N)
+     * @return input stream for the _metadata file
+     */
+    public abstract InputStream readMetadataFile(String checkpointPath) throws IOException;
+
+    /**
+     * Resolve a checkpoint path to a local filesystem directory containing the _metadata file.
+     * For local connectors, returns the path unchanged.
+     * For remote connectors (Docker, S3, GCS), copies the _metadata file to a temp directory.
+     *
+     * @param checkpointPath path to a specific checkpoint
+     * @return local filesystem path to a directory containing _metadata
+     */
+    public abstract String resolveMetadataPath(String checkpointPath) throws IOException;
+
+    /**
+     * Resolve a checkpoint path to a local filesystem directory containing ALL checkpoint files.
+     * For local connectors, returns the path unchanged.
+     * For remote connectors (Docker, S3, GCS), copies the entire checkpoint directory locally.
+     * Required for state reading operations that need access to state data files.
+     *
+     * @param checkpointPath path to a specific checkpoint
+     * @return local filesystem path to the full checkpoint directory
+     */
+    public abstract String resolveFullCheckpoint(String checkpointPath) throws IOException;
 
     /**
      * List immediate subdirectories at the given path.

@@ -4,6 +4,8 @@ import io.flinkstate.inspector.discovery.CheckpointEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 
@@ -42,6 +44,21 @@ public class S3StorageConnector extends StorageConnector {
 
     @Override
     public boolean validateCheckpoint(String checkpointPath) {
+        throw new UnsupportedOperationException("S3 connector not yet implemented");
+    }
+
+    @Override
+    public InputStream readMetadataFile(String checkpointPath) throws IOException {
+        throw new UnsupportedOperationException("S3 connector not yet implemented");
+    }
+
+    @Override
+    public String resolveMetadataPath(String checkpointPath) throws IOException {
+        throw new UnsupportedOperationException("S3 connector not yet implemented");
+    }
+
+    @Override
+    public String resolveFullCheckpoint(String checkpointPath) throws IOException {
         throw new UnsupportedOperationException("S3 connector not yet implemented");
     }
 

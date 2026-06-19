@@ -4,6 +4,9 @@ import io.flinkstate.inspector.discovery.CheckpointEntry;
 import io.flinkstate.inspector.discovery.SnapshotType;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -60,6 +63,21 @@ public class LocalStorageConnector extends StorageConnector {
     @Override
     public boolean validateCheckpoint(String checkpointPath) {
         return new File(checkpointPath, "_metadata").exists();
+    }
+
+    @Override
+    public InputStream readMetadataFile(String checkpointPath) throws IOException {
+        return new FileInputStream(new File(checkpointPath, "_metadata"));
+    }
+
+    @Override
+    public String resolveMetadataPath(String checkpointPath) {
+        return checkpointPath;
+    }
+
+    @Override
+    public String resolveFullCheckpoint(String checkpointPath) {
+        return checkpointPath;
     }
 
     @Override

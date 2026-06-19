@@ -12,7 +12,9 @@ Compatible with savepoints from Flink 1.x and 2.x (the State Processor API maint
 
 - **Web UI**: React dashboard for browsing, inspecting, and diffing state with guided navigation
 - **Auto-discovery**: reads the `_metadata` file to find all operators, state names, and types automatically
-- **Generic deserialization**: handles built-in Flink types (String, Long, POJO, Avro, Protobuf) without domain-specific code
+- **Source detection**: automatically finds running Flink Docker containers and their checkpoint paths
+- **Direct SST reading**: reads RocksDB SST files directly using `SstFileReader`, bypassing the State Processor API's `SavepointReader` and its requirement for a MiniCluster
+- **Generic deserialization**: handles built-in Flink types (String, Long, Double, Integer, POJO, Avro, Protobuf) without domain-specific code. Uses a `LenientClassLoader` that generates stub bytecode for missing application classes, so checkpoint metadata loads without the original job's dependencies
 - **Pluggable storage**: abstract `StorageConnector` class with built-in support for local filesystem, S3, GCS, and Docker containers
 - **State diff**: select two checkpoints and compare state side-by-side to see what changed
 - **CLI**: full command-line interface for scripting and automation
@@ -27,8 +29,8 @@ java -jar target/flink-state-inspector.jar serve --port 9741
 
 Open http://localhost:9741 in your browser. The UI guides you through:
 
-1. **Browse**: select an environment and storage bucket, or enter a path directly. The tool discovers all available checkpoints and savepoints, displayed in a sortable, filterable table.
-2. **Inspect**: pick a checkpoint, choose an operator from the auto-discovered list, and browse the state entries. Expandable rows show full JSON state values. Supports key filtering and keys-only mode.
+1. **Browse**: enter a path or click a detected source to auto-populate. The tool discovers all available checkpoints and savepoints, displayed in a sortable, filterable table. Running Docker containers with Flink checkpoint directories are detected automatically.
+2. **Inspect**: pick a checkpoint, and operators are auto-discovered. Select an operator to browse its keyed state entries. Expandable rows show full JSON state values. Supports key filtering and keys-only mode. The full checkpoint is cached locally on operator discovery, so state reads are immune to checkpoint rotation.
 3. **Diff**: select two checkpoints to compare. The tool shows added, removed, and modified state entries across operators.
 4. **Docs**: in-app documentation and API reference.
 
@@ -152,13 +154,25 @@ Built-in Flink types (String, Long, Integer, Maps, Lists) work without additiona
 
 ## Building
 
-Requires JDK 17+ and Node.js 18+ (for the web UI).
+Requires JDK 17+ (tested with JDK 22) and Node.js 18+ (for the web UI).
 
 ```bash
-mvn verify          # compile + test (backend)
-cd ui && npm run build   # build web UI
-mvn package         # build fat JAR with UI assets
+mvn package              # compile + build fat JAR
+cd ui && npm run build   # build web UI (for production)
+cd ui && npm run dev     # start UI dev server (for development)
 ```
+
+## How It Works
+
+Traditional Flink state inspection requires writing custom `KeyedStateReaderFunction` implementations with matching state descriptors, and running them through a `SavepointReader` that spins up a MiniCluster. This tool takes a different approach:
+
+1. **Metadata parsing**: reads the checkpoint `_metadata` file using `KeyedBackendSerializationProxy` to extract operator IDs, state descriptor names, key/value serializer snapshots, and max parallelism
+2. **Direct SST access**: resolves `IncrementalRemoteKeyedStateHandle` entries to individual RocksDB SST files. Handles both file-backed (`RelativeFileStateHandle`) and inline (`ByteStreamStateHandle`) storage
+3. **Column family mapping**: uses `SstFileReader.getTableProperties().getColumnFamilyName()` to map each SST file to its Flink state descriptor
+4. **Key deserialization**: uses `CompositeKeySerializationUtils` to skip the key group prefix and deserialize keys with the discovered key serializer
+5. **Value deserialization**: restores value serializers from snapshots and deserializes VALUE, LIST, and MAP state types
+
+This avoids the MiniCluster entirely, works without application classes on the classpath (via `LenientClassLoader`), and handles both shared and private state files from incremental checkpoints.
 
 ## Project Status
 
@@ -167,13 +181,16 @@ Under active development. See the [issue tracker](https://github.com/atomicdrago
 **Implemented:**
 - Storage connector abstraction with Local and Docker connectors
 - CLI framework with all commands
-- Checkpoint discovery and listing
+- Checkpoint and savepoint discovery and listing
+- Operator auto-discovery from checkpoint metadata
+- Generic keyed state reader with direct SST file access
+- Docker container auto-detection
+- Web UI with browse, inspect, and diff views
 
 **In progress:**
-- Operator auto-discovery from savepoint metadata (#1)
-- Generic state reader (#2)
-- Web UI port (#12)
 - S3 and GCS connectors (#3, #4)
+- Operator (broadcast) state reading
+- FRocksDB-format SST file support (Flink's bundled FRocksDB uses a different SST magic number than standard RocksDB)
 
 ## License
 
