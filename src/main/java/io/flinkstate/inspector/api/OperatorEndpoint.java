@@ -30,7 +30,8 @@ public final class OperatorEndpoint {
 
             LOG.info("Discover operators: path={}", path);
 
-            StorageConnector connector = StorageConnectorFactory.create(path);
+            Map<String, String> config = DiscoveryEndpoint.extractConfig(body);
+            StorageConnector connector = StorageConnectorFactory.create(path, config);
             String localPath = connector.resolveFullCheckpoint(path);
             CheckpointCache.getInstance().register(path, localPath);
             List<DiscoveredOperator> operators = MetadataReader.readOperatorsFromPath(

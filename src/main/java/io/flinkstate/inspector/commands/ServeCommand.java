@@ -28,6 +28,9 @@ public class ServeCommand implements Runnable {
     @CommandLine.Option(names = {"--host"}, description = "Bind address", defaultValue = "0.0.0.0")
     private String host;
 
+    @CommandLine.Mixin
+    private S3Options s3Options;
+
     @Override
     public void run() {
         Javalin app = Javalin.create(config -> {

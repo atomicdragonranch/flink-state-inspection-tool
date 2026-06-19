@@ -19,9 +19,12 @@ public class ListCommand implements Runnable {
     @CommandLine.Option(names = {"--limit", "-n"}, description = "Max entries to show", defaultValue = "20")
     private int limit;
 
+    @CommandLine.Mixin
+    private S3Options s3Options;
+
     @Override
     public void run() {
-        try (StorageConnector connector = StorageConnectorFactory.create(path)) {
+        try (StorageConnector connector = StorageConnectorFactory.create(path, s3Options.toConfigMap())) {
             List<CheckpointEntry> entries = connector.discoverCheckpoints(path, limit);
 
             if (entries.isEmpty()) {

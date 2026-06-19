@@ -13,6 +13,8 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,8 +45,9 @@ public final class DiscoveryEndpoint {
             JsonNode body = MAPPER.readTree(ctx.body());
             String path = requireField(body, "path");
             int limit = intField(body, "totalLimit", DEFAULT_LIMIT);
+            Map<String, String> config = extractConfig(body);
 
-            try (StorageConnector connector = StorageConnectorFactory.create(path)) {
+            try (StorageConnector connector = StorageConnectorFactory.create(path, config)) {
                 List<CheckpointEntry> checkpoints = connector.discoverCheckpoints(path, limit);
                 ctx.json(ApiResponse.success(toSnapshotResponse(checkpoints, connector)));
             }
@@ -54,8 +57,9 @@ public final class DiscoveryEndpoint {
             JsonNode body = MAPPER.readTree(ctx.body());
             String path = requireField(body, "path");
             int limit = intField(body, "totalLimit", DEFAULT_LIMIT);
+            Map<String, String> config = extractConfig(body);
 
-            try (StorageConnector connector = StorageConnectorFactory.create(path)) {
+            try (StorageConnector connector = StorageConnectorFactory.create(path, config)) {
                 List<CheckpointEntry> savepoints = connector.discoverCheckpoints(path, limit);
                 ctx.json(ApiResponse.success(toSnapshotResponse(savepoints, connector)));
             }
@@ -96,8 +100,28 @@ public final class DiscoveryEndpoint {
         return node.asInt(defaultValue);
     }
 
+    static Map<String, String> extractConfig(JsonNode body) {
+        JsonNode configNode = body.get("config");
+        if (configNode == null || !configNode.isObject()) {
+            return Collections.emptyMap();
+        }
+        Map<String, String> config = new LinkedHashMap<>();
+        Iterator<Map.Entry<String, JsonNode>> fields = configNode.fields();
+        while (fields.hasNext()) {
+            Map.Entry<String, JsonNode> field = fields.next();
+            config.put(field.getKey(), field.getValue().asText());
+        }
+        return config;
+    }
+
     private static List<Map<String, Object>> detectSources() {
         List<Map<String, Object>> sources = new ArrayList<>();
+        detectDockerSources(sources);
+        detectS3Sources(sources);
+        return sources;
+    }
+
+    private static void detectDockerSources(List<Map<String, Object>> sources) {
         try {
             List<String> containers = listDockerContainers();
             for (String container : containers) {
@@ -115,7 +139,29 @@ public final class DiscoveryEndpoint {
         } catch (Exception e) {
             LOG.debug("Docker auto-detection unavailable: {}", e.getMessage());
         }
-        return sources;
+    }
+
+    private static void detectS3Sources(List<Map<String, Object>> sources) {
+        String s3Paths = System.getenv("FLINK_S3_CHECKPOINT_PATHS");
+        if (s3Paths == null || s3Paths.isEmpty()) {
+            return;
+        }
+        for (String rawPath : s3Paths.split(",")) {
+            String path = rawPath.trim();
+            if (path.isEmpty()) continue;
+            try (StorageConnector connector = StorageConnectorFactory.create(path)) {
+                connector.discoverCheckpoints(path, 1);
+                String label = path.replaceFirst("^s3a?://", "");
+                Map<String, Object> source = new LinkedHashMap<>();
+                source.put("type", "s3");
+                source.put("path", path);
+                source.put("label", label);
+                sources.add(source);
+                LOG.info("Detected S3 source: {}", path);
+            } catch (Exception e) {
+                LOG.debug("S3 source not accessible: {} ({})", path, e.getMessage());
+            }
+        }
     }
 
     private static List<String> listDockerContainers() throws Exception {

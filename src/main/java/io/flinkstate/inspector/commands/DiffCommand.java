@@ -29,6 +29,9 @@ public class DiffCommand implements Runnable {
     @CommandLine.Option(names = {"--output", "-O"}, description = "Export diff to file")
     private String outputFile;
 
+    @CommandLine.Mixin
+    private S3Options s3Options;
+
     @Override
     public void run() {
         // TODO: implement with DiffExecutor + GenericKeyedStateReader

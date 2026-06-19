@@ -32,6 +32,9 @@ public class InspectCommand implements Runnable {
     @CommandLine.Option(names = {"--output", "-O"}, description = "Export results to file")
     private String outputFile;
 
+    @CommandLine.Mixin
+    private S3Options s3Options;
+
     @Override
     public void run() {
         // TODO: implement with OperatorDiscovery + GenericKeyedStateReader

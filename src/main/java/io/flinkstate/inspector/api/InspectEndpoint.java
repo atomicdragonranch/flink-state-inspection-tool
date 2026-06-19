@@ -33,7 +33,8 @@ public final class InspectEndpoint {
 
             LOG.info("Inspect keyed: path={}, operator={}", path, operatorUid);
 
-            try (StorageConnector connector = StorageConnectorFactory.create(path)) {
+            Map<String, String> connectorConfig = DiscoveryEndpoint.extractConfig(body);
+            try (StorageConnector connector = StorageConnectorFactory.create(path, connectorConfig)) {
                 String localPath = connector.resolveFullCheckpoint(path);
                 StateReadResult result = GenericStateReader.readKeyedState(
                     localPath, operatorUid, keyFilter, keysOnly, limit);

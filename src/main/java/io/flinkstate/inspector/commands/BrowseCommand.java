@@ -12,6 +12,9 @@ public class BrowseCommand implements Runnable {
         description = "Checkpoint/savepoint path (or storage base path to discover from)")
     private String path;
 
+    @CommandLine.Mixin
+    private S3Options s3Options;
+
     @Override
     public void run() {
         // TODO: implement interactive browser with auto-discovered operators
