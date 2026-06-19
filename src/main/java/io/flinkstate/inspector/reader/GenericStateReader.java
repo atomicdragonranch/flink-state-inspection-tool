@@ -196,11 +196,33 @@ public final class GenericStateReader {
                     return map;
                 }
                 default:
-                    return "<unsupported: " + sde.stateType + ">";
+                    return rawBytesMap(rawValue, sde.stateType);
             }
         } catch (Exception e) {
-            return "<error: " + e.getMessage() + ">";
+            return rawBytesMap(rawValue, e.getMessage());
         }
+    }
+
+    private static Map<String, Object> rawBytesMap(byte[] rawValue, String reason) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("_raw", true);
+        result.put("_reason", reason);
+        result.put("_bytes", rawValue.length);
+        result.put("_hex", bytesToHex(rawValue, 256));
+        if (rawValue.length <= 1024) {
+            result.put("_base64", java.util.Base64.getEncoder().encodeToString(rawValue));
+        }
+        return result;
+    }
+
+    private static String bytesToHex(byte[] bytes, int maxBytes) {
+        int len = Math.min(bytes.length, maxBytes);
+        StringBuilder sb = new StringBuilder(len * 2 + (len > maxBytes ? 3 : 0));
+        for (int i = 0; i < len; i++) {
+            sb.append(String.format("%02x", bytes[i] & 0xFF));
+        }
+        if (bytes.length > maxBytes) sb.append("...");
+        return sb.toString();
     }
 
     private static List<String> resolveSstFiles(
