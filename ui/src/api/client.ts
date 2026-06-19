@@ -120,6 +120,27 @@ export async function detectSources(): Promise<DetectedSource[]> {
   return res.data;
 }
 
+// --- Cache ---
+
+export interface CacheEntry {
+  sourcePath: string;
+  localPath: string;
+  cachedAt: number;
+  sizeBytes: number;
+}
+
+export async function listCache(): Promise<CacheEntry[]> {
+  const res = await fetchApi<CacheEntry[]>("/api/cache/list");
+  return res.data;
+}
+
+export async function deleteCache(localPath: string): Promise<void> {
+  await fetchApi<boolean>("/api/cache/delete", {
+    method: "POST",
+    body: JSON.stringify({ localPath })
+  });
+}
+
 // --- Documentation ---
 
 export async function getDoc(name: string): Promise<string> {

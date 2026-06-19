@@ -1,6 +1,7 @@
 package io.flinkstate.inspector.commands;
 
 import io.flinkstate.inspector.api.ApiResponse;
+import io.flinkstate.inspector.api.CacheEndpoint;
 import io.flinkstate.inspector.api.DiffEndpoint;
 import io.flinkstate.inspector.api.DiscoveryEndpoint;
 import io.flinkstate.inspector.api.DocsEndpoint;
@@ -55,6 +56,7 @@ public class ServeCommand implements Runnable {
         InspectEndpoint.register(app);
         DiffEndpoint.register(app);
         DocsEndpoint.register(app);
+        CacheEndpoint.register(app);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             LOG.info("Shutting down...");

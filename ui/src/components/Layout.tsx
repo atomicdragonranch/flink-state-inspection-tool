@@ -13,7 +13,8 @@ import HelpOutlineIcon from "@mui/icons-material/HelpOutline";
 const navItems = [
   { label: "Browse", path: "/" },
   { label: "Inspect", path: "/inspect" },
-  { label: "Diff", path: "/diff" }
+  { label: "Diff", path: "/diff" },
+  { label: "Cache", path: "/cache" }
 ];
 
 interface LayoutProps {

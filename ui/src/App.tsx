@@ -4,6 +4,7 @@ import { AppStateProvider } from "./context/AppStateContext";
 import BrowsePage from "./pages/BrowsePage";
 import InspectPage from "./pages/InspectPage";
 import DiffPage from "./pages/DiffPage";
+import CachePage from "./pages/CachePage";
 import DocsPage from "./pages/DocsPage";
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
             <Route path="/" element={<BrowsePage />} />
             <Route path="/inspect" element={<InspectPage />} />
             <Route path="/diff" element={<DiffPage />} />
+            <Route path="/cache" element={<CachePage />} />
             <Route path="/docs" element={<DocsPage />} />
           </Routes>
         </Layout>

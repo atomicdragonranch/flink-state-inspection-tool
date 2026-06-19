@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.flinkstate.inspector.discovery.DiscoveredOperator;
 import io.flinkstate.inspector.discovery.MetadataReader;
+import io.flinkstate.inspector.storage.CheckpointCache;
 import io.flinkstate.inspector.storage.StorageConnector;
 import io.flinkstate.inspector.storage.StorageConnectorFactory;
 import io.javalin.Javalin;
@@ -31,6 +32,7 @@ public final class OperatorEndpoint {
 
             StorageConnector connector = StorageConnectorFactory.create(path);
             String localPath = connector.resolveFullCheckpoint(path);
+            CheckpointCache.getInstance().register(path, localPath);
             List<DiscoveredOperator> operators = MetadataReader.readOperatorsFromPath(
                 localPath);
 
