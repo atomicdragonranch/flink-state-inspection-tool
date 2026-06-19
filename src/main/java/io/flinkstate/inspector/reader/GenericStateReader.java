@@ -173,7 +173,7 @@ public final class GenericStateReader {
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private static Object deserializeValue(StateDescriptorEntry sde, byte[] rawValue) {
+    static Object deserializeValue(StateDescriptorEntry sde, byte[] rawValue) {
         try {
             DataInputDeserializer valueInput = new DataInputDeserializer(rawValue);
             switch (sde.stateType) {
@@ -203,7 +203,7 @@ public final class GenericStateReader {
         }
     }
 
-    private static Map<String, Object> rawBytesMap(byte[] rawValue, String reason) {
+    static Map<String, Object> rawBytesMap(byte[] rawValue, String reason) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("_raw", true);
         result.put("_reason", reason);
@@ -215,7 +215,7 @@ public final class GenericStateReader {
         return result;
     }
 
-    private static String bytesToHex(byte[] bytes, int maxBytes) {
+    static String bytesToHex(byte[] bytes, int maxBytes) {
         int len = Math.min(bytes.length, maxBytes);
         StringBuilder sb = new StringBuilder(len * 2 + (len > maxBytes ? 3 : 0));
         for (int i = 0; i < len; i++) {
