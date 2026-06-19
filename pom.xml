@@ -11,7 +11,7 @@
 
     <name>Flink State Inspector</name>
     <description>Auto-discovery CLI for inspecting Apache Flink savepoint and checkpoint state</description>
-    <url>https://github.com/atomicdragonranch/flink-state-inspection-tool</url>
+    <url>https://github.com/mattbutlerdeveloper/flink-state-inspection-tool</url>
 
     <licenses>
         <license>

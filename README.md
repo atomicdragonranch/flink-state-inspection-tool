@@ -15,7 +15,7 @@ Compatible with savepoints from Flink 1.x and 2.x (the State Processor API maint
 - **Source detection**: automatically finds running Flink Docker containers and their checkpoint paths
 - **Direct SST reading**: reads RocksDB SST files directly using `SstFileReader`, bypassing the State Processor API's `SavepointReader` and its requirement for a MiniCluster
 - **Generic deserialization**: handles built-in Flink types (String, Long, Double, Integer, POJO, Avro, Protobuf) without domain-specific code. Uses a `LenientClassLoader` that generates stub bytecode for missing application classes, so checkpoint metadata loads without the original job's dependencies
-- **Pluggable storage**: abstract `StorageConnector` class with built-in support for local filesystem, S3, GCS, and Docker containers
+- **Pluggable storage**: abstract `StorageConnector` class with support for local filesystem, S3, and Docker containers (GCS planned)
 - **State diff**: select two checkpoints and compare state side-by-side to see what changed
 - **CLI**: full command-line interface for scripting and automation
 
@@ -176,19 +176,22 @@ This avoids the MiniCluster entirely, works without application classes on the c
 
 ## Project Status
 
-Under active development. See the [issue tracker](https://github.com/atomicdragonranch/flink-state-inspection-tool/issues) for the roadmap.
+Under active development. See the [issue tracker](https://github.com/mattbutlerdeveloper/flink-state-inspection-tool/issues) for the roadmap.
 
 **Implemented:**
-- Storage connector abstraction with Local and Docker connectors
+- Storage connector abstraction with Local, Docker, and S3 connectors
 - CLI framework with all commands
 - Checkpoint and savepoint discovery and listing
 - Operator auto-discovery from checkpoint metadata
 - Generic keyed state reader with direct SST file access
 - Docker container auto-detection
-- Web UI with browse, inspect, and diff views
+- S3 storage with AWS SDK v2 (also works with LocalStack and MinIO)
+- Web UI with browse, inspect, diff, and cache management views
+- Checkpoint cache for re-inspection and diffing
+- Raw bytes fallback for undeserializable state values
 
-**In progress:**
-- S3 and GCS connectors (#3, #4)
+**Planned:**
+- GCS connector (#4)
 - Operator (broadcast) state reading
 - FRocksDB-format SST file support (Flink's bundled FRocksDB uses a different SST magic number than standard RocksDB)
 
