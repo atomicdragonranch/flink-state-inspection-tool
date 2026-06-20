@@ -40,9 +40,7 @@ const SOURCE_TYPE_CONFIG: Record<
   s3: { label: "S3", placeholder: "s3://bucket-name/prefix" },
   gcs: {
     label: "GCS",
-    placeholder: "gs://bucket-name/prefix",
-    disabled: true,
-    tooltip: "GCS support coming soon"
+    placeholder: "gs://bucket-name/prefix"
   }
 };
 
@@ -94,7 +92,7 @@ export default function BrowsePage() {
 
   const handleSourceTypeChange = useCallback(
     (_: React.MouseEvent<HTMLElement>, value: SourceType | null) => {
-      if (value === null || value === "gcs") return;
+      if (value === null) return;
       setSourceType(value);
       setBrowse({ manualPath: "" });
     },
