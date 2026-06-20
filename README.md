@@ -3,15 +3,24 @@
 [![CI](https://github.com/atomicdragonranch/flink-state-inspection-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/atomicdragonranch/flink-state-inspection-tool/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Java 17+](https://img.shields.io/badge/Java-17%2B-orange.svg)](https://openjdk.org/)
-[![Tests](https://img.shields.io/badge/tests-210%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-210%20passing-brightgreen.svg)](https://github.com/atomicdragonranch/flink-state-inspection-tool/actions/workflows/ci.yml)
 
 Auto-discovery tool for inspecting Apache Flink savepoint and checkpoint state. Select an environment, pick a checkpoint, choose an operator, and browse the state. No custom reader classes required.
 
 ## Why
 
-Flink's State Processor API requires you to write a `KeyedStateReaderFunction` for every operator, with exact state descriptors matching your production job. That means maintaining a parallel codebase just to debug state. This tool eliminates that by auto-discovering operators, state names, and serializer metadata directly from the savepoint's `_metadata` file.
+Apache Flink stores operator state in checkpoints and savepoints so jobs can recover from failures. But inspecting that state is painful. The official approach (the [State Processor API](https://nightlies.apache.org/flink/flink-docs-stable/docs/libs/state_processor_api/)) requires you to:
 
-Compatible with savepoints from Flink 1.x and 2.x (the State Processor API maintains backward compatibility across versions).
+1. Write a custom `KeyedStateReaderFunction` for every operator you want to inspect
+2. Know the exact state descriptor names and types your job uses
+3. Have your application's classes on the classpath
+4. Spin up a MiniCluster just to read the data
+
+That means maintaining throwaway reader code for every job, updating it whenever state schemas change, and re-deploying it whenever you need to debug.
+
+This tool skips all of that. It reads the checkpoint's `_metadata` file to auto-discover operators, state names, and serializer configuration, then reads the RocksDB SST files directly. No reader code, no MiniCluster, no application JARs needed.
+
+Compatible with checkpoints and savepoints from Flink 1.x and 2.x.
 
 ## Features
 
