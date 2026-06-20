@@ -33,9 +33,11 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -46,6 +48,8 @@ public final class GenericStateReader {
 
     private static final Logger LOG = LoggerFactory.getLogger(GenericStateReader.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final LenientClassLoader LENIENT_CL =
+        new LenientClassLoader(GenericStateReader.class.getClassLoader());
 
     private GenericStateReader() {
     }
@@ -55,12 +59,10 @@ public final class GenericStateReader {
             String localCheckpointPath, String operatorUidOrHash,
             String keyFilter, boolean keysOnly, int limit) throws Exception {
 
-        ClassLoader lenientCl = new LenientClassLoader(
-            Thread.currentThread().getContextClassLoader());
         ClassLoader originalCl = Thread.currentThread().getContextClassLoader();
 
         try {
-            Thread.currentThread().setContextClassLoader(lenientCl);
+            Thread.currentThread().setContextClassLoader(LENIENT_CL);
 
             OperatorInfo opInfo = discoverOperatorInfo(localCheckpointPath, operatorUidOrHash);
 
@@ -115,110 +117,121 @@ public final class GenericStateReader {
             boolean ambiguousKeyPossible = CompositeKeySerializationUtils
                 .isAmbiguousKeyPossible(keySerializer, keySerializer);
 
-            List<String> sstFiles = resolveSstFiles(opInfo.stateHandle, localCheckpointPath);
+            List<File> tempSstFiles = new ArrayList<>();
+            List<String> sstFiles = resolveSstFiles(opInfo.stateHandle, localCheckpointPath, tempSstFiles);
 
             Map<String, Map<String, Object>> keyEntries = new LinkedHashMap<>();
             int maxKeys = limit * 10;
             boolean truncated = false;
 
-            for (String sstFile : sstFiles) {
-                try (Options opts = new Options();
-                     SstFileReader reader = new SstFileReader(opts)) {
-                    reader.open(sstFile);
-                    byte[] cfNameBytes = reader.getTableProperties().getColumnFamilyName();
-                    String cfName = new String(cfNameBytes, StandardCharsets.UTF_8);
+            try {
+                for (String sstFile : sstFiles) {
+                    try (Options opts = new Options();
+                         SstFileReader reader = new SstFileReader(opts)) {
+                        reader.open(sstFile);
+                        byte[] cfNameBytes = reader.getTableProperties().getColumnFamilyName();
+                        String cfName = new String(cfNameBytes, StandardCharsets.UTF_8);
 
-                    StateDescriptorEntry sde = stateByName.get(cfName);
-                    if (sde == null) continue;
+                        StateDescriptorEntry sde = stateByName.get(cfName);
+                        if (sde == null) continue;
 
-                    TypeSerializer nsSerializer = null;
-                    if ("MAP".equals(sde.stateType)) {
-                        for (StateMetaInfoSnapshot info : opInfo.stateInfos) {
-                            if (info.getName().equals(cfName)) {
-                                TypeSerializerSnapshot<?> nsSnap = info
-                                    .getTypeSerializerSnapshot(
-                                        StateMetaInfoSnapshot.CommonSerializerKeys
-                                            .NAMESPACE_SERIALIZER);
-                                if (nsSnap != null) {
-                                    nsSerializer = nsSnap.restoreSerializer();
+                        TypeSerializer nsSerializer = null;
+                        if ("MAP".equals(sde.stateType)) {
+                            for (StateMetaInfoSnapshot info : opInfo.stateInfos) {
+                                if (info.getName().equals(cfName)) {
+                                    TypeSerializerSnapshot<?> nsSnap = info
+                                        .getTypeSerializerSnapshot(
+                                            StateMetaInfoSnapshot.CommonSerializerKeys
+                                                .NAMESPACE_SERIALIZER);
+                                    if (nsSnap != null) {
+                                        nsSerializer = nsSnap.restoreSerializer();
+                                    }
+                                    break;
                                 }
-                                break;
                             }
                         }
-                    }
 
-                    try (ReadOptions readOpts = new ReadOptions();
-                         SstFileReaderIterator iter = reader.newIterator(readOpts)) {
-                        iter.seekToFirst();
-                        while (iter.isValid()) {
-                            byte[] rawKey = iter.key();
-                            byte[] rawValue = iter.value();
+                        try (ReadOptions readOpts = new ReadOptions();
+                             SstFileReaderIterator iter = reader.newIterator(readOpts)) {
+                            iter.seekToFirst();
+                            while (iter.isValid()) {
+                                byte[] rawKey = iter.key();
+                                byte[] rawValue = iter.value();
 
-                            DataInputDeserializer keyInput = new DataInputDeserializer(
-                                rawKey, keyGroupPrefixBytes,
-                                rawKey.length - keyGroupPrefixBytes);
-                            Object key = CompositeKeySerializationUtils
-                                .readKey(keySerializer, keyInput, ambiguousKeyPossible);
-                            String keyStr = String.valueOf(key);
+                                DataInputDeserializer keyInput = new DataInputDeserializer(
+                                    rawKey, keyGroupPrefixBytes,
+                                    rawKey.length - keyGroupPrefixBytes);
+                                Object key = CompositeKeySerializationUtils
+                                    .readKey(keySerializer, keyInput, ambiguousKeyPossible);
+                                String keyStr = String.valueOf(key);
 
-                            if (keyFilter != null && !keyFilter.isEmpty()
-                                    && !keyStr.contains(keyFilter)) {
-                                iter.next();
-                                continue;
-                            }
+                                if (keyFilter != null && !keyFilter.isEmpty()
+                                        && !keyStr.contains(keyFilter)) {
+                                    iter.next();
+                                    continue;
+                                }
 
-                            if (!keyEntries.containsKey(keyStr)
-                                    && keyEntries.size() >= maxKeys) {
-                                truncated = true;
-                                iter.next();
-                                continue;
-                            }
+                                if (!keyEntries.containsKey(keyStr)
+                                        && keyEntries.size() >= maxKeys) {
+                                    truncated = true;
+                                    iter.next();
+                                    continue;
+                                }
 
-                            Map<String, Object> entry = keyEntries.computeIfAbsent(
-                                keyStr, k -> {
-                                    Map<String, Object> e = new LinkedHashMap<>();
-                                    e.put("key", key);
-                                    return e;
-                                });
+                                Map<String, Object> entry = keyEntries.computeIfAbsent(
+                                    keyStr, k -> {
+                                        Map<String, Object> e = new LinkedHashMap<>();
+                                        e.put("key", key);
+                                        return e;
+                                    });
 
-                            if ("MAP".equals(sde.stateType)
-                                    && sde.mapKeySerializer != null
-                                    && sde.mapValueSerializer != null) {
-                                Object mapKey = extractMapKey(rawKey, keyGroupPrefixBytes,
-                                    keySerializer, nsSerializer, sde.mapKeySerializer);
-                                if (mapKey != null) {
-                                    try {
-                                        DataInputDeserializer valInput =
-                                            new DataInputDeserializer(rawValue);
-                                        if (rawValue.length > 0 && rawValue[0] == 0x00) {
-                                            valInput.skipBytesToRead(1);
+                                if ("MAP".equals(sde.stateType)
+                                        && sde.mapKeySerializer != null
+                                        && sde.mapValueSerializer != null) {
+                                    Object mapKey = extractMapKey(rawKey, keyGroupPrefixBytes,
+                                        keySerializer, nsSerializer, sde.mapKeySerializer);
+                                    if (mapKey != null) {
+                                        try {
+                                            DataInputDeserializer valInput =
+                                                new DataInputDeserializer(rawValue);
+                                            if (rawValue.length > 0 && rawValue[0] == 0x00) {
+                                                valInput.skipBytesToRead(1);
+                                            }
+                                            Object mapVal = sde.mapValueSerializer
+                                                .deserialize(valInput);
+                                            @SuppressWarnings("unchecked")
+                                            Map<String, Object> map = (Map<String, Object>)
+                                                entry.computeIfAbsent(sde.name,
+                                                    n -> new LinkedHashMap<>());
+                                            map.put(String.valueOf(mapKey), mapVal);
+                                        } catch (Exception ex) {
+                                            entry.put(sde.name, rawBytesMap(rawValue,
+                                                ex.getClass().getSimpleName()
+                                                + ": " + ex.getMessage()));
                                         }
-                                        Object mapVal = sde.mapValueSerializer
-                                            .deserialize(valInput);
-                                        @SuppressWarnings("unchecked")
-                                        Map<String, Object> map = (Map<String, Object>)
-                                            entry.computeIfAbsent(sde.name,
-                                                n -> new LinkedHashMap<>());
-                                        map.put(String.valueOf(mapKey), mapVal);
-                                    } catch (Exception ex) {
-                                        entry.put(sde.name, rawBytesMap(rawValue,
-                                            ex.getClass().getSimpleName()
-                                            + ": " + ex.getMessage()));
+                                    } else {
+                                        Object value = deserializeValue(sde, rawValue);
+                                        entry.put(sde.name, value);
                                     }
                                 } else {
                                     Object value = deserializeValue(sde, rawValue);
                                     entry.put(sde.name, value);
                                 }
-                            } else {
-                                Object value = deserializeValue(sde, rawValue);
-                                entry.put(sde.name, value);
-                            }
 
-                            iter.next();
+                                iter.next();
+                            }
                         }
+                    } catch (Exception e) {
+                        LOG.warn("Failed to read SST file {}: {}", sstFile, e.getMessage());
                     }
-                } catch (Exception e) {
-                    LOG.warn("Failed to read SST file {}: {}", sstFile, e.getMessage());
+                }
+            } finally {
+                for (File tempFile : tempSstFiles) {
+                    try {
+                        Files.deleteIfExists(tempFile.toPath());
+                    } catch (IOException e) {
+                        LOG.debug("Failed to delete temp SST file: {}", tempFile, e);
+                    }
                 }
             }
 
@@ -313,18 +326,19 @@ public final class GenericStateReader {
 
     private static List<String> resolveSstFiles(
             IncrementalRemoteKeyedStateHandle handle,
-            String localCheckpointPath) throws Exception {
+            String localCheckpointPath,
+            List<File> tempFilesOut) throws Exception {
         List<String> paths = new ArrayList<>();
         for (HandleAndLocalPath hp : handle.getSharedState()) {
             String lp = hp.getLocalPath();
             if (lp != null && !lp.endsWith(".sst") && !isSstHandle(hp)) continue;
-            String resolved = resolveHandlePath(hp.getHandle(), localCheckpointPath);
+            String resolved = resolveHandlePath(hp.getHandle(), localCheckpointPath, tempFilesOut);
             if (resolved != null) paths.add(resolved);
         }
         for (HandleAndLocalPath hp : handle.getPrivateState()) {
             String lp = hp.getLocalPath();
             if (lp != null && !lp.endsWith(".sst") && !isSstHandle(hp)) continue;
-            String resolved = resolveHandlePath(hp.getHandle(), localCheckpointPath);
+            String resolved = resolveHandlePath(hp.getHandle(), localCheckpointPath, tempFilesOut);
             if (resolved != null) paths.add(resolved);
         }
         return paths;
@@ -346,7 +360,9 @@ public final class GenericStateReader {
             if (in.available() > 0) {
                 return mapKeySerializer.deserialize(in);
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            LOG.debug("Failed to extract map key from {} bytes: {}",
+                rawKey.length, e.getMessage());
         }
         return null;
     }
@@ -361,7 +377,8 @@ public final class GenericStateReader {
     }
 
     private static String resolveHandlePath(
-            StreamStateHandle handle, String localCheckpointPath) throws Exception {
+            StreamStateHandle handle, String localCheckpointPath,
+            List<File> tempFilesOut) throws Exception {
         if (handle instanceof RelativeFileStateHandle) {
             String fileName = ((RelativeFileStateHandle) handle).getRelativePath();
             File f = new File(localCheckpointPath, fileName);
@@ -376,7 +393,7 @@ public final class GenericStateReader {
         try (InputStream in = handle.openInputStream()) {
             File tempFile = File.createTempFile("sst-", ".sst",
                 new File(localCheckpointPath));
-            tempFile.deleteOnExit();
+            tempFilesOut.add(tempFile);
             try (FileOutputStream out = new FileOutputStream(tempFile)) {
                 byte[] buf = new byte[8192];
                 int n;
@@ -392,15 +409,12 @@ public final class GenericStateReader {
     static OperatorInfo discoverOperatorInfo(
             String localCheckpointPath, String operatorUidOrHash) throws Exception {
 
-        ClassLoader lenientCl = new LenientClassLoader(
-            Thread.currentThread().getContextClassLoader());
-
         File metadataFile = new File(localCheckpointPath, "_metadata");
         CheckpointMetadata metadata;
         try (DataInputStream dis = new DataInputStream(
                 new BufferedInputStream(new FileInputStream(metadataFile)))) {
             metadata = Checkpoints.loadCheckpointMetadata(
-                dis, lenientCl, localCheckpointPath);
+                dis, LENIENT_CL, localCheckpointPath);
         }
 
         for (OperatorState opState : metadata.getOperatorStates()) {
@@ -417,7 +431,7 @@ public final class GenericStateReader {
 
                         try (InputStream in = openMetaHandle(metaHandle, localCheckpointPath)) {
                             KeyedBackendSerializationProxy<?> proxy =
-                                new KeyedBackendSerializationProxy<>(lenientCl);
+                                new KeyedBackendSerializationProxy<>(LENIENT_CL);
                             proxy.read(new DataInputViewStreamWrapper(in));
                             return new OperatorInfo(
                                 proxy.getKeySerializerSnapshot(),

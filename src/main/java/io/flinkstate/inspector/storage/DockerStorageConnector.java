@@ -14,6 +14,7 @@ import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
 /**
@@ -43,7 +45,7 @@ public class DockerStorageConnector extends StorageConnector {
     private static final long EXEC_TIMEOUT_SECONDS = 30;
     private static final long CP_TIMEOUT_SECONDS = 300;
 
-    private Path tempDir;
+    private final AtomicReference<Path> tempDirRef = new AtomicReference<>();
 
     @Override
     public String scheme() {
@@ -105,10 +107,8 @@ public class DockerStorageConnector extends StorageConnector {
         String container = parsed[0];
         String containerMetadataPath = parsed[1] + "/_metadata";
 
-        if (tempDir == null) {
-            tempDir = Files.createTempDirectory("flink-state-inspector-");
-        }
-        Path localDir = tempDir.resolve("chk-" + UUID.randomUUID().toString().substring(0, 8));
+        ensureTempDir();
+        Path localDir = tempDirRef.get().resolve("chk-" + UUID.randomUUID().toString().substring(0, 8));
         Files.createDirectories(localDir);
         Path localFile = localDir.resolve("_metadata");
         dockerCp(container, containerMetadataPath, localFile.toString());
@@ -122,10 +122,8 @@ public class DockerStorageConnector extends StorageConnector {
         String container = parsed[0];
         String containerPath = parsed[1];
 
-        if (tempDir == null) {
-            tempDir = Files.createTempDirectory("flink-state-inspector-");
-        }
-        Path localDir = tempDir.resolve("full-chk-" + UUID.randomUUID().toString().substring(0, 8));
+        ensureTempDir();
+        Path localDir = tempDirRef.get().resolve("full-chk-" + UUID.randomUUID().toString().substring(0, 8));
         dockerCp(container, containerPath, localDir.toString());
         LOG.info("Copied full checkpoint from {}:{} to {}", container, containerPath, localDir);
 
@@ -148,10 +146,8 @@ public class DockerStorageConnector extends StorageConnector {
     public String resolveForFlink(String path) {
         String[] parsed = parseDockerUri(path);
         try {
-            if (tempDir == null) {
-                tempDir = Files.createTempDirectory("flink-state-inspector-");
-            }
-            Path localDir = tempDir.resolve(UUID.randomUUID().toString());
+            ensureTempDir();
+            Path localDir = tempDirRef.get().resolve(UUID.randomUUID().toString());
             dockerCp(parsed[0], parsed[1], localDir.toString());
             LOG.info("Copied checkpoint from container {} to {}", parsed[0], localDir);
             return localDir.toString();
@@ -170,6 +166,25 @@ public class DockerStorageConnector extends StorageConnector {
     public void close() {
         // Temp files are managed by CheckpointCache (eviction + shutdown hook).
         // Deleting here would destroy files the cache still references.
+    }
+
+    void ensureTempDir() throws IOException {
+        if (tempDirRef.get() == null) {
+            Path newDir = Files.createTempDirectory("flink-state-inspector-");
+            try {
+                Files.setPosixFilePermissions(newDir,
+                    PosixFilePermissions.fromString("rwx------"));
+            } catch (UnsupportedOperationException e) {
+                LOG.debug("POSIX permissions not supported on this OS; skipping");
+            }
+            if (!tempDirRef.compareAndSet(null, newDir)) {
+                Files.deleteIfExists(newDir);
+            }
+        }
+    }
+
+    AtomicReference<Path> getTempDirRef() {
+        return tempDirRef;
     }
 
     static String[] parseDockerUri(String uri) {

@@ -25,11 +25,13 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class S3StorageConnector extends StorageConnector {
@@ -39,7 +41,7 @@ public class S3StorageConnector extends StorageConnector {
     private static final int MAX_S3_OBJECTS = 10_000;
 
     private S3Client s3Client;
-    private Path tempDir;
+    private final AtomicReference<Path> tempDirRef = new AtomicReference<>();
 
     @Override
     public String scheme() {
@@ -204,12 +206,25 @@ public class S3StorageConnector extends StorageConnector {
     }
 
     private Path createLocalDir(String prefix) throws IOException {
-        if (tempDir == null) {
-            tempDir = Files.createTempDirectory("flink-s3-inspector-");
-        }
-        Path localDir = tempDir.resolve(prefix + UUID.randomUUID().toString().substring(0, 8));
+        ensureTempDir();
+        Path localDir = tempDirRef.get().resolve(prefix + UUID.randomUUID().toString().substring(0, 8));
         Files.createDirectories(localDir);
         return localDir;
+    }
+
+    void ensureTempDir() throws IOException {
+        if (tempDirRef.get() == null) {
+            Path newDir = Files.createTempDirectory("flink-s3-inspector-");
+            try {
+                Files.setPosixFilePermissions(newDir,
+                    PosixFilePermissions.fromString("rwx------"));
+            } catch (UnsupportedOperationException e) {
+                LOG.debug("POSIX permissions not supported on this OS; skipping");
+            }
+            if (!tempDirRef.compareAndSet(null, newDir)) {
+                Files.deleteIfExists(newDir);
+            }
+        }
     }
 
     private List<S3Object> listAllObjects(String bucket, String prefix) {
@@ -262,6 +277,7 @@ public class S3StorageConnector extends StorageConnector {
 
     @Override
     public void close() {
+        Path tempDir = tempDirRef.get();
         if (tempDir != null) {
             LOG.info("Cleaning up temp directory: {}", tempDir);
             try {
@@ -278,6 +294,10 @@ public class S3StorageConnector extends StorageConnector {
             s3Client.close();
             LOG.info("S3 client closed");
         }
+    }
+
+    AtomicReference<Path> getTempDirRef() {
+        return tempDirRef;
     }
 
     S3Client getS3Client() {

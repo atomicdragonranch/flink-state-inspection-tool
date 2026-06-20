@@ -10,6 +10,7 @@ import io.flinkstate.inspector.api.OperatorEndpoint;
 import io.flinkstate.inspector.util.ErrorDisplay;
 import io.javalin.Javalin;
 import io.javalin.http.staticfiles.Location;
+import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
@@ -42,16 +43,22 @@ public class ServeCommand implements Runnable {
             }));
         });
 
-        app.exception(Exception.class, (e, ctx) -> {
-            LOG.debug("API error", e);
-            ctx.status(500);
-            ctx.json(ApiResponse.error(ErrorDisplay.extractRootCause(e)));
-        });
-
         app.exception(IllegalArgumentException.class, (e, ctx) -> {
             LOG.debug("Bad request", e);
             ctx.status(400);
             ctx.json(ApiResponse.error(e.getMessage()));
+        });
+
+        app.exception(IOException.class, (e, ctx) -> {
+            LOG.debug("I/O error", e);
+            ctx.status(500);
+            ctx.json(ApiResponse.error("I/O error: " + e.getMessage()));
+        });
+
+        app.exception(Exception.class, (e, ctx) -> {
+            LOG.error("Unexpected API error", e);
+            ctx.status(500);
+            ctx.json(ApiResponse.error(ErrorDisplay.extractRootCause(e)));
         });
 
         app.get("/health", ctx -> ctx.result("ok"));

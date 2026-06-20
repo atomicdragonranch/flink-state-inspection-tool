@@ -414,7 +414,8 @@ public final class OperatorStateReader {
             m.setAccessible(true);
             return (boolean) m.invoke(proxy);
         } catch (Exception e) {
-            LOG.debug("Could not check compression flag, assuming uncompressed: {}",
+            LOG.warn("Could not determine compression flag via reflection; "
+                + "defaulting to uncompressed. Method: isUsingStateCompression, cause: {}",
                 e.getMessage());
             return false;
         }
