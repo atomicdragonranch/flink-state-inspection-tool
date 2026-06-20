@@ -1,5 +1,10 @@
 # Flink State Inspector
 
+[![CI](https://github.com/atomicdragonranch/flink-state-inspection-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/atomicdragonranch/flink-state-inspection-tool/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Java 17+](https://img.shields.io/badge/Java-17%2B-orange.svg)](https://openjdk.org/)
+[![Tests](https://img.shields.io/badge/tests-210%20passing-brightgreen.svg)]()
+
 Auto-discovery tool for inspecting Apache Flink savepoint and checkpoint state. Select an environment, pick a checkpoint, choose an operator, and browse the state. No custom reader classes required.
 
 ## Why
