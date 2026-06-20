@@ -13,6 +13,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Chip from "@mui/material/Chip";
+import CompareArrowsIcon from "@mui/icons-material/CompareArrows";
 import { useDiscoverOperators } from "../hooks/useOperators";
 import { useDiffKeyed, useDiffBroadcast } from "../hooks/useDiff";
 import DiffView from "../components/DiffView";
@@ -120,8 +121,11 @@ export default function DiffPage() {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 3 }}>
+      <Typography variant="h4" sx={{ mb: 0.5, fontWeight: 700 }}>
         Compare Checkpoints
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Select two checkpoints to compare state side-by-side
       </Typography>
 
       <Paper sx={{ p: 3, mb: 3 }}>
@@ -280,6 +284,30 @@ export default function DiffPage() {
           </Button>
         </Box>
       </Paper>
+
+      {!result && !activeMutation.isPending && !activeMutation.isError && operators.length === 0 && (
+        <Paper
+          sx={{
+            p: 5,
+            mb: 3,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            textAlign: "center",
+            bgcolor: "rgba(19, 47, 76, 0.5)",
+            border: "1px dashed",
+            borderColor: "rgba(80, 144, 211, 0.2)"
+          }}
+        >
+          <CompareArrowsIcon sx={{ fontSize: 48, color: "rgba(80, 144, 211, 0.4)", mb: 2 }} />
+          <Typography variant="h6" sx={{ color: "rgba(255,255,255,0.7)", mb: 1 }}>
+            No comparison loaded
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Enter two checkpoint paths, discover operators, and click Compare to see differences
+          </Typography>
+        </Paper>
+      )}
 
       {activeMutation.isPending && (
         <Box sx={{ display: "flex", alignItems: "center", gap: 2, my: 3 }}>

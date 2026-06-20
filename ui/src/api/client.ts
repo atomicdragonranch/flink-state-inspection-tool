@@ -140,9 +140,15 @@ export interface CacheEntry {
   sizeBytes: number;
 }
 
+interface CacheListResponse {
+  totalCount: number;
+  offset: number;
+  entries: CacheEntry[];
+}
+
 export async function listCache(): Promise<CacheEntry[]> {
-  const res = await fetchApi<CacheEntry[]>("/api/cache/list");
-  return res.data;
+  const res = await fetchApi<CacheListResponse>("/api/cache/list");
+  return res.data.entries;
 }
 
 export async function deleteCache(id: string): Promise<void> {
