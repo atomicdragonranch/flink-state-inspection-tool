@@ -1,0 +1,43 @@
+services:
+  jobmanager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: test-job-jm
+    ports:
+      - "8082:8081"
+    command: standalone-job
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: jobmanager
+        state.backend.type: rocksdb
+        state.checkpoints.dir: file:///tmp/flink-checkpoints
+        state.savepoints.dir: file:///tmp/flink-savepoints
+        execution.checkpointing.interval: 30s
+        execution.checkpointing.incremental: true
+        state.checkpoints.num-retained: 5
+    volumes:
+      - flink-checkpoints:/tmp/flink-checkpoints
+      - flink-savepoints:/tmp/flink-savepoints
+
+  taskmanager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: test-job-tm
+    depends_on:
+      - jobmanager
+    command: taskmanager
+    environment:
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 4
+        state.backend.type: rocksdb
+        state.checkpoints.dir: file:///tmp/flink-checkpoints
+        state.savepoints.dir: file:///tmp/flink-savepoints
+    volumes:
+      - flink-checkpoints:/tmp/flink-checkpoints
+
+volumes:
+  flink-checkpoints:
+  flink-savepoints:
