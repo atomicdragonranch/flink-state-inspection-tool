@@ -44,12 +44,12 @@ public final class DiffEndpoint {
             JsonNode body = MAPPER.readTree(ctx.body());
             String path1 = requireField(body, "path1");
             String path2 = requireField(body, "path2");
-            String stateName = requireField(body, "stateName");
+            String operatorUid = requireField(body, "operatorUid");
 
-            LOG.info("Diff broadcast: path1={}, path2={}, state={}", path1, path2, stateName);
+            LOG.info("Diff broadcast: path1={}, path2={}, operator={}", path1, path2, operatorUid);
 
             Map<String, Object> data = new LinkedHashMap<>();
-            data.put("operatorName", stateName);
+            data.put("operatorName", operatorUid);
             data.put("label1", extractLabel(path1));
             data.put("label2", extractLabel(path2));
             data.put("added", Collections.emptyList());

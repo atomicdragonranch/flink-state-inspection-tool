@@ -162,6 +162,45 @@ cd ui && npm run build   # build web UI (for production)
 cd ui && npm run dev     # start UI dev server (for development)
 ```
 
+## Testing
+
+### Unit Tests
+
+```bash
+mvn test
+```
+
+53 unit tests covering metadata parsing, operator discovery, state deserialization, storage connectors, CLI options, and API endpoints.
+
+### Integration Tests
+
+Requires Docker. Uses TestContainers with LocalStack for S3 connector tests.
+
+```bash
+mvn verify -Pintegration
+```
+
+11 integration tests covering S3 checkpoint discovery, validation, metadata reading, full checkpoint download, directory listing, and temp directory cleanup.
+
+### Testing Against a Live Flink Job
+
+To test with real checkpoint data, run a Flink job with RocksDB checkpointing in Docker Compose. Point the inspector at the container:
+
+```bash
+# List checkpoints from a running Flink container
+java -jar target/flink-state-inspector.jar list docker://flink-jobmanager/tmp/flink-checkpoints
+
+# Start the web UI and browse live state
+java -jar target/flink-state-inspector.jar serve --port 9741
+```
+
+For best results, configure Flink to retain multiple checkpoints so they don't get cleaned up before inspection:
+
+```yaml
+execution.checkpointing.interval: 60s
+state.checkpoints.num-retained: 3
+```
+
 ## How It Works
 
 Traditional Flink state inspection requires writing custom `KeyedStateReaderFunction` implementations with matching state descriptors, and running them through a `SavepointReader` that spins up a MiniCluster. This tool takes a different approach:

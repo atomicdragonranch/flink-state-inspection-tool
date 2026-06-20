@@ -25,14 +25,16 @@ import type { OperatorInfo } from "../api/client";
 type InspectType = "keyed" | "broadcast";
 
 function operatorLabel(op: OperatorInfo): string {
-  if (op.name) return op.name;
-  const shortUid = op.uid.substring(0, 12) + "...";
-  if (op.keyedStates.length > 0 && op.operatorStates.length > 0) {
-    return `${shortUid} (keyed + ${op.operatorStates.join(", ")})`;
+  const base = op.name || op.uid.substring(0, 12) + "...";
+  const parts: string[] = [];
+  if (op.keyedStates.length > 0) {
+    const count = op.keyedStateEntryCount;
+    parts.push(count > 0 ? "has data" : count === 0 ? "empty" : "keyed");
   }
-  if (op.keyedStates.length > 0) return `${shortUid} (keyed)`;
-  if (op.operatorStates.length > 0) return `${shortUid} (${op.operatorStates.join(", ")})`;
-  return shortUid;
+  if (op.operatorStates.length > 0) {
+    parts.push(op.operatorStates.join(", "));
+  }
+  return parts.length > 0 ? `${base} (${parts.join(" + ")})` : base;
 }
 
 export default function InspectPage() {
@@ -200,8 +202,8 @@ export default function InspectPage() {
                   key={op.uid}
                   label={operatorLabel(op)}
                   size="small"
-                  variant="outlined"
-                  color="primary"
+                  variant={op.keyedStateEntryCount > 0 ? "filled" : "outlined"}
+                  color={op.keyedStateEntryCount > 0 ? "success" : "default"}
                 />
               ))}
             </Box>
@@ -247,7 +249,9 @@ export default function InspectPage() {
               disabled={visibleOperators.length === 0}
             >
               {visibleOperators.map(op => (
-                <MenuItem key={op.uid} value={op.uid}>
+                <MenuItem key={op.uid} value={op.uid}
+                  sx={op.keyedStateEntryCount > 0 ? { fontWeight: "bold" } : undefined}
+                >
                   {operatorLabel(op)}
                 </MenuItem>
               ))}

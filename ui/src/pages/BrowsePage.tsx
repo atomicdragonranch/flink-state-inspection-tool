@@ -20,8 +20,7 @@ import {
   discoverCheckpoints,
   discoverSavepoints,
   detectSources,
-  type CheckpointInfo,
-  type DetectedSource
+  type CheckpointInfo
 } from "../api/client";
 
 const INITIAL_LIMIT = 20;
@@ -59,7 +58,7 @@ export default function BrowsePage() {
   const [sortField, setSortField] = useState<SortField>("modified");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
-  const { data: detectedSources } = useQuery({
+  const { data: detectedSources, isLoading: isDetecting } = useQuery({
     queryKey: ["detectSources"],
     queryFn: detectSources,
     staleTime: 30_000,
@@ -203,25 +202,44 @@ export default function BrowsePage() {
           Enter a path to scan for checkpoints and savepoints. Supported
           schemes: local filesystem paths, s3://, gs://, docker://container/path
         </Typography>
+        {isDetecting && (
+          <Box sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
+            <CircularProgress size={16} />
+            <Typography variant="body2" color="text.secondary">
+              Scanning for running Flink containers...
+            </Typography>
+          </Box>
+        )}
         {detectedSources && detectedSources.length > 0 && (
           <Box sx={{ mb: 2 }}>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
               Detected sources:
             </Typography>
             <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-              {detectedSources.map(source => (
-                <Chip
-                  key={source.path}
-                  label={source.label}
-                  size="small"
-                  color="primary"
-                  variant={browse.manualPath === source.path ? "filled" : "outlined"}
-                  onClick={() => setBrowse({ manualPath: source.path })}
-                  clickable
-                />
-              ))}
+              {detectedSources.map(source => {
+                const hasData = source.snapshotCount > 0;
+                const label = hasData
+                  ? `${source.label} (${source.snapshotCount})`
+                  : source.label;
+                return (
+                  <Chip
+                    key={source.path}
+                    label={label}
+                    size="small"
+                    color={hasData ? "success" : "default"}
+                    variant={browse.manualPath === source.path ? "filled" : hasData ? "filled" : "outlined"}
+                    onClick={() => setBrowse({ manualPath: source.path })}
+                    clickable
+                  />
+                );
+              })}
             </Box>
           </Box>
+        )}
+        {!isDetecting && detectedSources && detectedSources.length === 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            No running Flink containers detected.
+          </Typography>
         )}
         <Box sx={{ display: "flex", gap: 2, alignItems: "flex-end" }}>
           <TextField

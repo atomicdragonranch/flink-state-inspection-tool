@@ -48,6 +48,7 @@ export interface OperatorInfo {
   name: string;
   keyedStates: string[];
   operatorStates: string[];
+  keyedStateEntryCount: number;
 }
 
 export interface OperatorDiscovery {
@@ -113,6 +114,7 @@ export interface DetectedSource {
   container: string;
   path: string;
   label: string;
+  snapshotCount: number;
 }
 
 export async function detectSources(): Promise<DetectedSource[]> {

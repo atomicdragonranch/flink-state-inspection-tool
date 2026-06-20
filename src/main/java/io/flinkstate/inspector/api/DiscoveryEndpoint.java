@@ -127,11 +127,14 @@ public final class DiscoveryEndpoint {
             for (String container : containers) {
                 for (String checkpointPath : COMMON_CHECKPOINT_PATHS) {
                     if (hasDirectory(container, checkpointPath)) {
+                        String dockerPath = "docker://" + container + checkpointPath;
+                        int snapshotCount = probeSnapshotCount(dockerPath);
                         Map<String, Object> source = new LinkedHashMap<>();
                         source.put("type", "docker");
                         source.put("container", container);
-                        source.put("path", "docker://" + container + checkpointPath);
+                        source.put("path", dockerPath);
                         source.put("label", container + ":" + checkpointPath);
+                        source.put("snapshotCount", snapshotCount);
                         sources.add(source);
                     }
                 }
@@ -150,12 +153,13 @@ public final class DiscoveryEndpoint {
             String path = rawPath.trim();
             if (path.isEmpty()) continue;
             try (StorageConnector connector = StorageConnectorFactory.create(path)) {
-                connector.discoverCheckpoints(path, 1);
+                List<CheckpointEntry> found = connector.discoverCheckpoints(path, 1);
                 String label = path.replaceFirst("^s3a?://", "");
                 Map<String, Object> source = new LinkedHashMap<>();
                 source.put("type", "s3");
                 source.put("path", path);
                 source.put("label", label);
+                source.put("snapshotCount", found.size());
                 sources.add(source);
                 LOG.info("Detected S3 source: {}", path);
             } catch (Exception e) {
@@ -180,6 +184,15 @@ public final class DiscoveryEndpoint {
         }
         process.waitFor();
         return names;
+    }
+
+    private static int probeSnapshotCount(String path) {
+        try (StorageConnector connector = StorageConnectorFactory.create(path)) {
+            return connector.discoverCheckpoints(path, 10).size();
+        } catch (Exception e) {
+            LOG.debug("Could not probe snapshots at {}: {}", path, e.getMessage());
+            return 0;
+        }
     }
 
     private static boolean hasDirectory(String container, String path) {

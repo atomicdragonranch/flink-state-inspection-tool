@@ -37,11 +37,32 @@ public final class OperatorEndpoint {
             List<DiscoveredOperator> operators = MetadataReader.readOperatorsFromPath(
                 localPath);
 
+            int sstCount = countSstFiles(new java.io.File(localPath));
+            for (DiscoveredOperator op : operators) {
+                if (!op.getKeyedStates().isEmpty()) {
+                    op.setKeyedStateEntryCount(sstCount);
+                }
+            }
+
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("operators", operators);
             data.put("localPath", localPath);
             ctx.json(ApiResponse.success(data));
         });
+    }
+
+    private static int countSstFiles(java.io.File checkpointDir) {
+        int count = 0;
+        java.io.File[] files = checkpointDir.listFiles();
+        if (files == null) return 0;
+        for (java.io.File f : files) {
+            if (f.isFile() && f.getName().endsWith(".sst")) {
+                count++;
+            } else if (f.isDirectory()) {
+                count += countSstFiles(f);
+            }
+        }
+        return count;
     }
 
     private static String requireField(JsonNode body, String fieldName) {
