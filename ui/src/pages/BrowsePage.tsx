@@ -15,6 +15,9 @@ import TableSortLabel from "@mui/material/TableSortLabel";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Alert from "@mui/material/Alert";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import Tooltip from "@mui/material/Tooltip";
 import { useAppState } from "../context/AppStateContext";
 import {
   discoverCheckpoints,
@@ -22,6 +25,33 @@ import {
   detectSources,
   type CheckpointInfo
 } from "../api/client";
+
+type SourceType = "local" | "docker" | "s3" | "gcs";
+
+const SOURCE_TYPE_CONFIG: Record<
+  SourceType,
+  { label: string; placeholder: string; disabled?: boolean; tooltip?: string }
+> = {
+  local: { label: "Local", placeholder: "/path/to/checkpoints" },
+  docker: {
+    label: "Docker",
+    placeholder: "docker://container-name/path/to/checkpoints"
+  },
+  s3: { label: "S3", placeholder: "s3://bucket-name/prefix" },
+  gcs: {
+    label: "GCS",
+    placeholder: "gs://bucket-name/prefix",
+    disabled: true,
+    tooltip: "GCS support coming soon"
+  }
+};
+
+function inferSourceType(path: string): SourceType {
+  if (path.startsWith("docker://")) return "docker";
+  if (path.startsWith("s3://")) return "s3";
+  if (path.startsWith("gs://")) return "gcs";
+  return "local";
+}
 
 const INITIAL_LIMIT = 20;
 const MAX_LIMIT = 1000;
@@ -57,6 +87,18 @@ export default function BrowsePage() {
 
   const [sortField, setSortField] = useState<SortField>("modified");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [sourceType, setSourceType] = useState<SourceType>(() =>
+    browse.manualPath ? inferSourceType(browse.manualPath) : "local"
+  );
+
+  const handleSourceTypeChange = useCallback(
+    (_: React.MouseEvent<HTMLElement>, value: SourceType | null) => {
+      if (value === null || value === "gcs") return;
+      setSourceType(value);
+      setBrowse({ manualPath: "" });
+    },
+    [setBrowse]
+  );
 
   const { data: detectedSources, isLoading: isDetecting } = useQuery({
     queryKey: ["detectSources"],
@@ -199,10 +241,47 @@ export default function BrowsePage() {
           Discover Snapshots
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Enter a path to scan for checkpoints and savepoints. Supported
-          schemes: local filesystem paths, s3://, gs://, docker://container/path
+          Select a source type and enter a path to scan for checkpoints and
+          savepoints.
         </Typography>
-        {isDetecting && (
+
+        <ToggleButtonGroup
+          value={sourceType}
+          exclusive
+          onChange={handleSourceTypeChange}
+          size="small"
+          sx={{ mb: 2 }}
+        >
+          {(Object.keys(SOURCE_TYPE_CONFIG) as SourceType[]).map(key => {
+            const config = SOURCE_TYPE_CONFIG[key];
+            if (config.tooltip) {
+              return (
+                <Tooltip key={key} title={config.tooltip} arrow>
+                  <span>
+                    <ToggleButton
+                      value={key}
+                      disabled={config.disabled}
+                      sx={{ textTransform: "none", px: 2 }}
+                    >
+                      {config.label}
+                    </ToggleButton>
+                  </span>
+                </Tooltip>
+              );
+            }
+            return (
+              <ToggleButton
+                key={key}
+                value={key}
+                sx={{ textTransform: "none", px: 2 }}
+              >
+                {config.label}
+              </ToggleButton>
+            );
+          })}
+        </ToggleButtonGroup>
+
+        {sourceType === "docker" && isDetecting && (
           <Box sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
             <CircularProgress size={16} />
             <Typography variant="body2" color="text.secondary">
@@ -210,43 +289,65 @@ export default function BrowsePage() {
             </Typography>
           </Box>
         )}
-        {detectedSources && detectedSources.length > 0 && (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-              Detected sources:
-            </Typography>
-            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-              {detectedSources.map(source => {
-                const hasData = source.snapshotCount > 0;
-                const label = hasData
-                  ? `${source.label} (${source.snapshotCount})`
-                  : source.label;
-                return (
-                  <Chip
-                    key={source.path}
-                    label={label}
-                    size="small"
-                    color={hasData ? "success" : "default"}
-                    variant={browse.manualPath === source.path ? "filled" : hasData ? "filled" : "outlined"}
-                    onClick={() => setBrowse({ manualPath: source.path })}
-                    clickable
-                  />
-                );
-              })}
+        {sourceType === "docker" &&
+          detectedSources &&
+          detectedSources.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mb: 0.5 }}
+              >
+                Detected containers:
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                {detectedSources.map(source => {
+                  const hasData = source.snapshotCount > 0;
+                  const label = hasData
+                    ? `${source.label} (${source.snapshotCount})`
+                    : source.label;
+                  return (
+                    <Chip
+                      key={source.path}
+                      label={label}
+                      size="small"
+                      color={hasData ? "success" : "default"}
+                      variant={
+                        browse.manualPath === source.path
+                          ? "filled"
+                          : hasData
+                          ? "filled"
+                          : "outlined"
+                      }
+                      onClick={() => setBrowse({ manualPath: source.path })}
+                      clickable
+                    />
+                  );
+                })}
+              </Box>
             </Box>
-          </Box>
-        )}
-        {!isDetecting && detectedSources && detectedSources.length === 0 && (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            No running Flink containers detected.
-          </Typography>
-        )}
+          )}
+        {sourceType === "docker" &&
+          !isDetecting &&
+          detectedSources &&
+          detectedSources.length === 0 && (
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              No running Flink containers detected.
+            </Typography>
+          )}
         <Box sx={{ display: "flex", gap: 2, alignItems: "flex-end" }}>
           <TextField
             label="Snapshot path"
-            placeholder="/opt/flink/checkpoints/my-job/"
+            placeholder={SOURCE_TYPE_CONFIG[sourceType].placeholder}
             value={browse.manualPath}
-            onChange={e => setBrowse({ manualPath: e.target.value })}
+            onChange={e => {
+              const val = e.target.value;
+              setBrowse({ manualPath: val });
+              const inferred = inferSourceType(val);
+              if (inferred !== sourceType && !SOURCE_TYPE_CONFIG[inferred].disabled) {
+                setSourceType(inferred);
+              }
+            }}
             onKeyDown={handleKeyDown}
             fullWidth
             size="small"
