@@ -21,6 +21,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /**
@@ -39,6 +40,8 @@ public class DockerStorageConnector extends StorageConnector {
     private static final Logger LOG = LoggerFactory.getLogger(DockerStorageConnector.class);
     private static final Pattern VALID_CONTAINER_NAME = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9_.-]+$");
     private static final Pattern DANGEROUS_PATH_CHARS = Pattern.compile("[;|&$`'\"\\\\(){}]");
+    private static final long EXEC_TIMEOUT_SECONDS = 30;
+    private static final long CP_TIMEOUT_SECONDS = 300;
 
     private Path tempDir;
 
@@ -243,7 +246,12 @@ public class DockerStorageConnector extends StorageConnector {
                     }
                 }
             }
-            process.waitFor();
+            boolean finished = process.waitFor(EXEC_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                LOG.error("Docker exec timed out after {}s: {}", EXEC_TIMEOUT_SECONDS, fullCommand);
+                return Collections.emptyList();
+            }
             return lines;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -259,7 +267,12 @@ public class DockerStorageConnector extends StorageConnector {
             Process process = new ProcessBuilder("docker", "cp",
                 container + ":" + containerPath, localPath)
                 .start();
-            int exitCode = process.waitFor();
+            boolean finished = process.waitFor(CP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new IOException("docker cp timed out after " + CP_TIMEOUT_SECONDS + "s");
+            }
+            int exitCode = process.exitValue();
             if (exitCode != 0) {
                 throw new IOException("docker cp exited with code " + exitCode);
             }

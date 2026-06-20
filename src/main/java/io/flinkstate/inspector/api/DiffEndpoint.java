@@ -25,7 +25,6 @@ public final class DiffEndpoint {
             String path2 = requireField(body, "path2");
             String operatorUid = requireField(body, "operatorUid");
 
-            // TODO: wire to DiffExecutor + auto-discovery (#1, #2, #6)
             LOG.info("Diff keyed: path1={}, path2={}, operator={}", path1, path2, operatorUid);
 
             Map<String, Object> data = new LinkedHashMap<>();
@@ -37,7 +36,9 @@ public final class DiffEndpoint {
             data.put("modified", Collections.emptyList());
             data.put("unchangedCount", 0);
             data.put("totalKeys", 0);
-            ctx.json(ApiResponse.success(data));
+            data.put("stub", true);
+            ctx.json(ApiResponse.successWithPartialRead(data,
+                "Diff comparison not yet implemented; returning empty placeholder"));
         });
 
         app.post("/api/diff/broadcast", ctx -> {
@@ -57,7 +58,9 @@ public final class DiffEndpoint {
             data.put("modified", Collections.emptyList());
             data.put("unchangedCount", 0);
             data.put("totalKeys", 0);
-            ctx.json(ApiResponse.success(data));
+            data.put("stub", true);
+            ctx.json(ApiResponse.successWithPartialRead(data,
+                "Diff comparison not yet implemented; returning empty placeholder"));
         });
     }
 

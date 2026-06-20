@@ -396,7 +396,8 @@ public final class OperatorStateReader {
             }
         }
 
-        return new StateSerializers(false, null, null);
+        throw new IllegalStateException(
+            "No serializer found for state '" + stateName + "' in operator metadata");
     }
 
     private static FSDataInputStream asFSDataInputStream(InputStream in) {
@@ -446,6 +447,10 @@ public final class OperatorStateReader {
 
         @Override
         public void seek(long desired) throws java.io.IOException {
+            if (desired < pos) {
+                throw new java.io.IOException(
+                    "Backward seek not supported: current=" + pos + ", target=" + desired);
+            }
             if (desired > pos) {
                 long toSkip = desired - pos;
                 long skipped = 0;

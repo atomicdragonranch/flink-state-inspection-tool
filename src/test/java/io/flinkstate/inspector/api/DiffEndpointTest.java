@@ -64,6 +64,8 @@ class DiffEndpointTest {
             String body = response.body().string();
             assertThat(body).contains("\"label1\":\"a\"");
             assertThat(body).contains("\"label2\":\"b\"");
+            assertThat(body).contains("\"stub\":true");
+            assertThat(body).contains("\"partialRead\":true");
         });
     }
 

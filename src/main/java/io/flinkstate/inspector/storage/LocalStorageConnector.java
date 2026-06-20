@@ -15,7 +15,28 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class LocalStorageConnector extends StorageConnector {
+
+    private static final Logger LOG = LoggerFactory.getLogger(LocalStorageConnector.class);
+
+    static void validatePath(String path) {
+        if (path == null || path.isEmpty()) {
+            throw new IllegalArgumentException("Path is required");
+        }
+        try {
+            File canonical = new File(path).getCanonicalFile();
+            File absolute = new File(path).getAbsoluteFile();
+            if (!canonical.getPath().equals(absolute.getPath())) {
+                LOG.warn("Path traversal detected: {} resolved to {}", path, canonical.getPath());
+                throw new IllegalArgumentException("Path must not contain '..' segments");
+            }
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Invalid path: " + path);
+        }
+    }
 
     @Override
     public String scheme() {
@@ -28,6 +49,7 @@ public class LocalStorageConnector extends StorageConnector {
 
     @Override
     public List<CheckpointEntry> discoverCheckpoints(String basePath, int limit) {
+        validatePath(basePath);
         File base = new File(basePath);
         if (!base.isDirectory()) {
             return Collections.emptyList();
@@ -62,11 +84,13 @@ public class LocalStorageConnector extends StorageConnector {
 
     @Override
     public boolean validateCheckpoint(String checkpointPath) {
+        validatePath(checkpointPath);
         return new File(checkpointPath, "_metadata").exists();
     }
 
     @Override
     public InputStream readMetadataFile(String checkpointPath) throws IOException {
+        validatePath(checkpointPath);
         return new FileInputStream(new File(checkpointPath, "_metadata"));
     }
 
@@ -87,6 +111,7 @@ public class LocalStorageConnector extends StorageConnector {
 
     @Override
     public List<String> listDirectories(String path) {
+        validatePath(path);
         File dir = new File(path);
         File[] subdirs = dir.listFiles(File::isDirectory);
         if (subdirs == null) {

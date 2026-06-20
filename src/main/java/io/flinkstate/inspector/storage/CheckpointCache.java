@@ -19,10 +19,15 @@ public final class CheckpointCache {
 
     private static final Logger LOG = LoggerFactory.getLogger(CheckpointCache.class);
     private static final CheckpointCache INSTANCE = new CheckpointCache();
+    static final int MAX_ENTRIES = 50;
 
     private final ConcurrentHashMap<String, CacheEntry> entries = new ConcurrentHashMap<>();
 
     private CheckpointCache() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            LOG.info("Cleaning up {} cached checkpoints on shutdown", entries.size());
+            clear();
+        }, "checkpoint-cache-cleanup"));
     }
 
     public static CheckpointCache getInstance() {
@@ -30,11 +35,23 @@ public final class CheckpointCache {
     }
 
     public String register(String sourcePath, String localPath) {
+        evictIfNeeded();
         String id = UUID.randomUUID().toString().substring(0, 8);
         long size = computeDirectorySize(new File(localPath));
         entries.put(id, new CacheEntry(id, sourcePath, localPath, System.currentTimeMillis(), size));
         LOG.info("Cached checkpoint [{}]: {} -> {} ({} bytes)", id, sourcePath, localPath, size);
         return id;
+    }
+
+    private void evictIfNeeded() {
+        while (entries.size() >= MAX_ENTRIES) {
+            CacheEntry oldest = entries.values().stream()
+                .min(Comparator.comparingLong(CacheEntry::cachedAt))
+                .orElse(null);
+            if (oldest == null) break;
+            LOG.info("Evicting oldest cache entry [{}]: {}", oldest.id(), oldest.sourcePath());
+            delete(oldest.id());
+        }
     }
 
     public String lookupLocalPath(String sourcePath) {
