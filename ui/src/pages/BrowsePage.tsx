@@ -15,9 +15,14 @@ import TableSortLabel from "@mui/material/TableSortLabel";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Alert from "@mui/material/Alert";
-import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
-import Tooltip from "@mui/material/Tooltip";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import InputAdornment from "@mui/material/InputAdornment";
+import FolderIcon from "@mui/icons-material/Folder";
+import CloudIcon from "@mui/icons-material/Cloud";
+import StorageIcon from "@mui/icons-material/Storage";
 import { useAppState } from "../context/AppStateContext";
 import {
   discoverCheckpoints,
@@ -28,28 +33,63 @@ import {
 
 type SourceType = "local" | "docker" | "s3" | "gcs";
 
-const SOURCE_TYPE_CONFIG: Record<
-  SourceType,
-  { label: string; placeholder: string; disabled?: boolean; tooltip?: string }
-> = {
-  local: { label: "Local", placeholder: "/path/to/checkpoints" },
-  docker: {
-    label: "Docker",
-    placeholder: "docker://container-name/path/to/checkpoints"
+const SOURCE_TYPES: {
+  value: SourceType;
+  label: string;
+  placeholder: string;
+  icon: React.ReactNode;
+  prefix?: string;
+}[] = [
+  {
+    value: "local",
+    label: "Local Filesystem",
+    placeholder: "/path/to/checkpoints",
+    icon: <FolderIcon fontSize="small" />
   },
-  s3: { label: "S3", placeholder: "s3://bucket-name/prefix" },
-  gcs: {
-    label: "GCS",
-    placeholder: "gs://bucket-name/prefix"
+  {
+    value: "docker",
+    label: "Docker Container",
+    placeholder: "container-name/path/to/checkpoints",
+    icon: <StorageIcon fontSize="small" />,
+    prefix: "docker://"
+  },
+  {
+    value: "s3",
+    label: "AWS S3",
+    placeholder: "bucket-name/prefix",
+    icon: <CloudIcon fontSize="small" />,
+    prefix: "s3://"
+  },
+  {
+    value: "gcs",
+    label: "Google Cloud Storage",
+    placeholder: "bucket-name/prefix",
+    icon: <CloudIcon fontSize="small" />,
+    prefix: "gs://"
   }
-};
+];
 
 function inferSourceType(path: string): SourceType {
   if (path.startsWith("docker://")) return "docker";
-  if (path.startsWith("s3://")) return "s3";
-  if (path.startsWith("s3a://")) return "s3";
+  if (path.startsWith("s3://") || path.startsWith("s3a://")) return "s3";
   if (path.startsWith("gs://")) return "gcs";
   return "local";
+}
+
+function stripPrefix(path: string, sourceType: SourceType): string {
+  const config = SOURCE_TYPES.find(s => s.value === sourceType);
+  if (config?.prefix && path.startsWith(config.prefix)) {
+    return path.slice(config.prefix.length);
+  }
+  return path;
+}
+
+function addPrefix(path: string, sourceType: SourceType): string {
+  const config = SOURCE_TYPES.find(s => s.value === sourceType);
+  if (config?.prefix && !path.startsWith(config.prefix)) {
+    return config.prefix + path;
+  }
+  return path;
 }
 
 const INITIAL_LIMIT = 20;
@@ -89,19 +129,16 @@ export default function BrowsePage() {
   const [sourceType, setSourceType] = useState<SourceType>(() =>
     browse.manualPath ? inferSourceType(browse.manualPath) : "local"
   );
-
-  const handleSourceTypeChange = useCallback(
-    (_: React.MouseEvent<HTMLElement>, value: SourceType | null) => {
-      if (value === null) return;
-      setSourceType(value);
-      setBrowse({ manualPath: "" });
-    },
-    [setBrowse]
+  const [pathInput, setPathInput] = useState(() =>
+    browse.manualPath ? stripPrefix(browse.manualPath, inferSourceType(browse.manualPath)) : ""
   );
+
+  const sourceConfig = SOURCE_TYPES.find(s => s.value === sourceType)!;
 
   const { data: detectedSources, isLoading: isDetecting } = useQuery({
     queryKey: ["detectSources"],
     queryFn: detectSources,
+    enabled: sourceType === "docker",
     staleTime: 30_000,
     retry: false
   });
@@ -115,19 +152,45 @@ export default function BrowsePage() {
     }
   }, [mutationData, setBrowse]);
 
+  const doDiscover = useCallback(
+    (fullPath: string) => {
+      if (!fullPath) return;
+      setBrowse({
+        manualPath: fullPath,
+        appPath: fullPath,
+        currentLimit: INITIAL_LIMIT
+      });
+      currentLimitRef.current = INITIAL_LIMIT;
+      setDiffSelection(null);
+      discoverMutation.mutate({
+        appPath: fullPath,
+        totalLimit: INITIAL_LIMIT
+      });
+    },
+    [setBrowse, setDiffSelection, discoverMutation]
+  );
+
   const handleDiscover = useCallback(() => {
-    if (!browse.manualPath) return;
-    setBrowse({
-      appPath: browse.manualPath,
-      currentLimit: INITIAL_LIMIT
-    });
-    currentLimitRef.current = INITIAL_LIMIT;
-    setDiffSelection(null);
-    discoverMutation.mutate({
-      appPath: browse.manualPath,
-      totalLimit: INITIAL_LIMIT
-    });
-  }, [browse.manualPath, setBrowse, setDiffSelection, discoverMutation]);
+    const fullPath = addPrefix(pathInput, sourceType);
+    doDiscover(fullPath);
+  }, [pathInput, sourceType, doDiscover]);
+
+  const handleSourceTypeChange = useCallback(
+    (newType: SourceType) => {
+      setSourceType(newType);
+      setPathInput("");
+      setBrowse({ manualPath: "" });
+    },
+    [setBrowse]
+  );
+
+  const handleDetectedSourceClick = useCallback(
+    (path: string) => {
+      setPathInput(stripPrefix(path, "docker"));
+      doDiscover(path);
+    },
+    [doDiscover]
+  );
 
   const handleLoadMore = useCallback(() => {
     if (!browse.appPath) return;
@@ -198,6 +261,20 @@ export default function BrowsePage() {
     [handleDiscover]
   );
 
+  const handlePathChange = useCallback(
+    (val: string) => {
+      setPathInput(val);
+      const fullPath = addPrefix(val, sourceType);
+      setBrowse({ manualPath: fullPath });
+      const inferred = inferSourceType(fullPath);
+      if (inferred !== sourceType) {
+        setSourceType(inferred);
+        setPathInput(stripPrefix(fullPath, inferred));
+      }
+    },
+    [sourceType, setBrowse]
+  );
+
   const rawCheckpoints = mutationData ?? browse.checkpoints;
   const checkpoints = useMemo(() => {
     if (!rawCheckpoints || rawCheckpoints.length === 0) return rawCheckpoints;
@@ -239,49 +316,73 @@ export default function BrowsePage() {
         <Typography variant="h6" sx={{ mb: 2 }}>
           Discover Snapshots
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Select a source type and enter a path to scan for checkpoints and
-          savepoints.
-        </Typography>
 
-        <ToggleButtonGroup
-          value={sourceType}
-          exclusive
-          onChange={handleSourceTypeChange}
-          size="small"
-          sx={{ mb: 2 }}
-        >
-          {(Object.keys(SOURCE_TYPE_CONFIG) as SourceType[]).map(key => {
-            const config = SOURCE_TYPE_CONFIG[key];
-            if (config.tooltip) {
-              return (
-                <Tooltip key={key} title={config.tooltip} arrow>
-                  <span>
-                    <ToggleButton
-                      value={key}
-                      disabled={config.disabled}
-                      sx={{ textTransform: "none", px: 2 }}
-                    >
-                      {config.label}
-                    </ToggleButton>
-                  </span>
-                </Tooltip>
-              );
+        <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start", mb: 2 }}>
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel id="source-type-label">Source</InputLabel>
+            <Select
+              labelId="source-type-label"
+              value={sourceType}
+              label="Source"
+              onChange={e =>
+                handleSourceTypeChange(e.target.value as SourceType)
+              }
+            >
+              {SOURCE_TYPES.map(st => (
+                <MenuItem key={st.value} value={st.value}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    {st.icon}
+                    {st.label}
+                  </Box>
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <TextField
+            label="Path"
+            placeholder={sourceConfig.placeholder}
+            value={pathInput}
+            onChange={e => handlePathChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            fullWidth
+            size="small"
+            InputProps={
+              sourceConfig.prefix
+                ? {
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontFamily: '"JetBrains Mono", monospace',
+                            color: "text.secondary",
+                            fontSize: "0.85rem"
+                          }}
+                        >
+                          {sourceConfig.prefix}
+                        </Typography>
+                      </InputAdornment>
+                    )
+                  }
+                : undefined
             }
-            return (
-              <ToggleButton
-                key={key}
-                value={key}
-                sx={{ textTransform: "none", px: 2 }}
-              >
-                {config.label}
-              </ToggleButton>
-            );
-          })}
-        </ToggleButtonGroup>
+            sx={{
+              "& input": { fontFamily: '"JetBrains Mono", monospace' }
+            }}
+          />
+          <Button
+            variant="contained"
+            onClick={handleDiscover}
+            disabled={!pathInput || discoverMutation.isPending}
+            sx={{ whiteSpace: "nowrap", minWidth: 100 }}
+          >
+            Discover
+          </Button>
+        </Box>
 
         {sourceType === "docker" && isDetecting && (
-          <Box sx={{ mb: 2, display: "flex", alignItems: "center", gap: 1 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <CircularProgress size={16} />
             <Typography variant="body2" color="text.secondary">
               Scanning for running Flink containers...
@@ -291,13 +392,13 @@ export default function BrowsePage() {
         {sourceType === "docker" &&
           detectedSources &&
           detectedSources.length > 0 && (
-            <Box sx={{ mb: 2 }}>
+            <Box>
               <Typography
                 variant="body2"
                 color="text.secondary"
                 sx={{ mb: 0.5 }}
               >
-                Detected containers:
+                Detected containers (click to discover):
               </Typography>
               <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
                 {detectedSources.map(source => {
@@ -318,7 +419,7 @@ export default function BrowsePage() {
                           ? "filled"
                           : "outlined"
                       }
-                      onClick={() => setBrowse({ manualPath: source.path })}
+                      onClick={() => handleDetectedSourceClick(source.path)}
                       clickable
                     />
                   );
@@ -330,39 +431,10 @@ export default function BrowsePage() {
           !isDetecting &&
           detectedSources &&
           detectedSources.length === 0 && (
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary">
               No running Flink containers detected.
             </Typography>
           )}
-        <Box sx={{ display: "flex", gap: 2, alignItems: "flex-end" }}>
-          <TextField
-            label="Snapshot path"
-            placeholder={SOURCE_TYPE_CONFIG[sourceType].placeholder}
-            value={browse.manualPath}
-            onChange={e => {
-              const val = e.target.value;
-              setBrowse({ manualPath: val });
-              const inferred = inferSourceType(val);
-              if (inferred !== sourceType && !SOURCE_TYPE_CONFIG[inferred].disabled) {
-                setSourceType(inferred);
-              }
-            }}
-            onKeyDown={handleKeyDown}
-            fullWidth
-            size="small"
-            sx={{
-              "& input": { fontFamily: '"JetBrains Mono", monospace' }
-            }}
-          />
-          <Button
-            variant="contained"
-            onClick={handleDiscover}
-            disabled={!browse.manualPath || discoverMutation.isPending}
-            sx={{ whiteSpace: "nowrap" }}
-          >
-            Discover
-          </Button>
-        </Box>
       </Paper>
 
       {discoverMutation.isPending && (
