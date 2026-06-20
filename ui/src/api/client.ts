@@ -29,7 +29,17 @@ async function fetchApi<T>(
     ...options
   });
 
-  const json: ApiResponse<T> = await response.json();
+  const text = await response.text();
+  if (!text) {
+    throw new ApiError(`Server returned empty response (HTTP ${response.status})`);
+  }
+
+  let json: ApiResponse<T>;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new ApiError(`Invalid JSON response (HTTP ${response.status})`);
+  }
 
   if (!response.ok || json.error) {
     throw new ApiError(

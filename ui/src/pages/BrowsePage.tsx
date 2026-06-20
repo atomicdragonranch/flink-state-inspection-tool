@@ -23,6 +23,10 @@ import InputAdornment from "@mui/material/InputAdornment";
 import FolderIcon from "@mui/icons-material/Folder";
 import CloudIcon from "@mui/icons-material/Cloud";
 import StorageIcon from "@mui/icons-material/Storage";
+import SearchIcon from "@mui/icons-material/Search";
+import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import SaveIcon from "@mui/icons-material/Save";
+import WorkIcon from "@mui/icons-material/Work";
 import { useAppState } from "../context/AppStateContext";
 import {
   discoverCheckpoints,
@@ -306,10 +310,25 @@ export default function BrowsePage() {
     resultCount >= currentLimitRef.current &&
     currentLimitRef.current < MAX_LIMIT;
 
+  const stats = useMemo(() => {
+    if (!checkpoints || checkpoints.length === 0) return null;
+    const cpCount = checkpoints.filter(
+      c => c.type !== "savepoint" && !c.displayLabel?.startsWith("savepoint-")
+    ).length;
+    const spCount = checkpoints.length - cpCount;
+    const jobIds = new Set(checkpoints.map(c => c.shortJobId));
+    return { cpCount, spCount, jobCount: jobIds.size };
+  }, [checkpoints]);
+
+  const isFirstVisit = !checkpoints && !discoverMutation.isPending && !discoverMutation.isError;
+
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 3 }}>
+      <Typography variant="h4" sx={{ mb: 0.5, fontWeight: 700 }}>
         Browse Snapshots
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Discover and inspect Flink checkpoints and savepoints from any storage backend
       </Typography>
 
       <Paper sx={{ p: 3, mb: 3 }}>
@@ -437,6 +456,30 @@ export default function BrowsePage() {
           )}
       </Paper>
 
+      {isFirstVisit && (
+        <Paper
+          sx={{
+            p: 5,
+            mb: 3,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            textAlign: "center",
+            bgcolor: "rgba(19, 47, 76, 0.5)",
+            border: "1px dashed",
+            borderColor: "rgba(80, 144, 211, 0.2)"
+          }}
+        >
+          <SearchIcon sx={{ fontSize: 48, color: "rgba(80, 144, 211, 0.4)", mb: 2 }} />
+          <Typography variant="h6" sx={{ color: "rgba(255,255,255,0.7)", mb: 1 }}>
+            No snapshots loaded
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Select a source type above and enter a path to discover checkpoints and savepoints
+          </Typography>
+        </Paper>
+      )}
+
       {discoverMutation.isPending && (
         <Box sx={{ display: "flex", alignItems: "center", gap: 2, my: 3 }}>
           <CircularProgress size={24} />
@@ -450,6 +493,36 @@ export default function BrowsePage() {
             ? discoverMutation.error.message
             : "Failed to discover snapshots"}
         </Alert>
+      )}
+
+      {stats && (
+        <Box sx={{ display: "flex", gap: 1.5, mb: 2, flexWrap: "wrap" }}>
+          {stats.cpCount > 0 && (
+            <Chip
+              icon={<PhotoCameraIcon />}
+              label={`${stats.cpCount} checkpoint${stats.cpCount !== 1 ? "s" : ""}`}
+              size="small"
+              variant="outlined"
+              sx={{ borderColor: "rgba(80, 144, 211, 0.4)" }}
+            />
+          )}
+          {stats.spCount > 0 && (
+            <Chip
+              icon={<SaveIcon />}
+              label={`${stats.spCount} savepoint${stats.spCount !== 1 ? "s" : ""}`}
+              size="small"
+              color="info"
+              variant="outlined"
+            />
+          )}
+          <Chip
+            icon={<WorkIcon />}
+            label={`${stats.jobCount} job${stats.jobCount !== 1 ? "s" : ""}`}
+            size="small"
+            variant="outlined"
+            sx={{ borderColor: "rgba(80, 144, 211, 0.4)" }}
+          />
+        </Box>
       )}
 
       {diffSelection && (

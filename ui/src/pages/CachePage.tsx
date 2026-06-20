@@ -12,6 +12,7 @@ import TableRow from "@mui/material/TableRow";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Alert from "@mui/material/Alert";
+import CachedIcon from "@mui/icons-material/Cached";
 import { listCache, deleteCache, type CacheEntry } from "../api/client";
 
 function formatBytes(bytes: number): string {
@@ -78,8 +79,11 @@ export default function CachePage() {
 
   return (
     <Box>
-      <Typography variant="h4" sx={{ mb: 3 }}>
+      <Typography variant="h4" sx={{ mb: 0.5, fontWeight: 700 }}>
         Downloaded State
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Locally cached checkpoint data for fast re-inspection and diffing
       </Typography>
 
       {isError && (
@@ -121,17 +125,40 @@ export default function CachePage() {
         </Box>
       )}
 
-      <Paper sx={{ overflow: "auto" }}>
-        {isLoading ? (
+      {!isLoading && (!entries || entries.length === 0) && (
+        <Paper
+          sx={{
+            p: 5,
+            mb: 3,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            textAlign: "center",
+            bgcolor: "rgba(19, 47, 76, 0.5)",
+            border: "1px dashed",
+            borderColor: "rgba(80, 144, 211, 0.2)"
+          }}
+        >
+          <CachedIcon sx={{ fontSize: 48, color: "rgba(80, 144, 211, 0.4)", mb: 2 }} />
+          <Typography variant="h6" sx={{ color: "rgba(255,255,255,0.7)", mb: 1 }}>
+            No cached checkpoints
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Inspect a checkpoint to download its state data locally. Cached data persists across sessions.
+          </Typography>
+        </Paper>
+      )}
+
+      {isLoading && (
+        <Paper sx={{ overflow: "auto" }}>
           <Typography sx={{ p: 3 }} color="text.secondary">
             Loading...
           </Typography>
-        ) : !entries || entries.length === 0 ? (
-          <Typography sx={{ p: 3 }} color="text.secondary">
-            No cached checkpoints. Inspect a checkpoint to download its state
-            data locally.
-          </Typography>
-        ) : (
+        </Paper>
+      )}
+
+      {entries && entries.length > 0 && (
+      <Paper sx={{ overflow: "auto" }}>
           <Table size="small">
             <TableHead>
               <TableRow>
@@ -222,8 +249,8 @@ export default function CachePage() {
               })}
             </TableBody>
           </Table>
-        )}
       </Paper>
+      )}
     </Box>
   );
 }
