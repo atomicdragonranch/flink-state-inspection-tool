@@ -36,7 +36,9 @@ class CacheEndpointTest {
             var response = client.get("/api/cache/list");
 
             assertThat(response.code()).isEqualTo(200);
-            assertThat(response.body().string()).contains("\"data\":[]");
+            String body = response.body().string();
+            assertThat(body).contains("\"totalCount\":0");
+            assertThat(body).contains("\"entries\":[]");
         });
     }
 
@@ -56,6 +58,7 @@ class CacheEndpointTest {
             String body = response.body().string();
             assertThat(body).contains("\"id\":\"" + id + "\"");
             assertThat(body).contains("\"sourcePath\":\"docker://container/chk-1\"");
+            assertThat(body).contains("\"totalCount\":1");
             assertThat(body).doesNotContain("localPath");
         });
     }
@@ -98,6 +101,65 @@ class CacheEndpointTest {
 
             assertThat(response.code()).isEqualTo(200);
             assertThat(response.body().string()).contains("false");
+        });
+    }
+
+    @Test
+    void listRespectsLimitParameter(@TempDir Path tempDir) throws IOException {
+        // Arrange
+        for (int i = 0; i < 3; i++) {
+            Path chkDir = tempDir.resolve("chk-" + i);
+            Files.createDirectories(chkDir);
+            Files.writeString(chkDir.resolve("_metadata"), "data");
+            CheckpointCache.getInstance().register("source-" + i, chkDir.toString());
+        }
+
+        // Act / Assert
+        JavalinTest.test(createApp(), (server, client) -> {
+            var response = client.get("/api/cache/list?limit=2");
+
+            assertThat(response.code()).isEqualTo(200);
+            String body = response.body().string();
+            assertThat(body).contains("\"totalCount\":3");
+        });
+    }
+
+    @Test
+    void listRespectsOffsetParameter(@TempDir Path tempDir) throws IOException {
+        // Arrange
+        for (int i = 0; i < 3; i++) {
+            Path chkDir = tempDir.resolve("chk-" + i);
+            Files.createDirectories(chkDir);
+            Files.writeString(chkDir.resolve("_metadata"), "data");
+            CheckpointCache.getInstance().register("source-" + i, chkDir.toString());
+        }
+
+        // Act / Assert
+        JavalinTest.test(createApp(), (server, client) -> {
+            var response = client.get("/api/cache/list?offset=2&limit=10");
+
+            assertThat(response.code()).isEqualTo(200);
+            String body = response.body().string();
+            assertThat(body).contains("\"totalCount\":3");
+            assertThat(body).contains("\"offset\":2");
+        });
+    }
+
+    @Test
+    void listReturnsDefaultOffsetZero(@TempDir Path tempDir) throws IOException {
+        // Arrange
+        Path chkDir = tempDir.resolve("chk-0");
+        Files.createDirectories(chkDir);
+        Files.writeString(chkDir.resolve("_metadata"), "data");
+        CheckpointCache.getInstance().register("source-0", chkDir.toString());
+
+        // Act / Assert
+        JavalinTest.test(createApp(), (server, client) -> {
+            var response = client.get("/api/cache/list");
+
+            assertThat(response.code()).isEqualTo(200);
+            String body = response.body().string();
+            assertThat(body).contains("\"offset\":0");
         });
     }
 }

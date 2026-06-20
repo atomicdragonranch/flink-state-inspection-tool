@@ -214,6 +214,82 @@ class DiffEndpointTest {
             .containsExactly("running-average", "event-count");
     }
 
+    @Test
+    void computeDiffWithOffsetPaginatesAddedList() {
+        // Arrange
+        List<Map<String, Object>> entries1 = new ArrayList<>();
+
+        List<Map<String, Object>> entries2 = new ArrayList<>();
+        entries2.add(entry("sensor-0", 100.0));
+        entries2.add(entry("sensor-1", 200.0));
+        entries2.add(entry("sensor-2", 300.0));
+
+        StateReadResult result1 = new StateReadResult("op", entries1, List.of("key", "value"));
+        StateReadResult result2 = new StateReadResult("op", entries2, List.of("key", "value"));
+
+        // Act
+        Map<String, Object> diff = DiffEndpoint.computeDiff(
+            result1, result2, "op", "/chk-1", "/chk-2", 1, 2);
+
+        // Assert
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> added = (List<Map<String, Object>>) diff.get("added");
+        assertThat(added).hasSize(2);
+        assertThat(added.get(0).get("key")).isEqualTo("sensor-1");
+        assertThat(added.get(1).get("key")).isEqualTo("sensor-2");
+        assertThat(diff.get("totalAdded")).isEqualTo(3);
+        assertThat(diff.get("offset")).isEqualTo(1);
+    }
+
+    @Test
+    void computeDiffWithOffsetBeyondSizeReturnsEmptyLists() {
+        // Arrange
+        List<Map<String, Object>> entries1 = new ArrayList<>();
+        entries1.add(entry("sensor-0", 100.0));
+
+        List<Map<String, Object>> entries2 = new ArrayList<>();
+        entries2.add(entry("sensor-0", 200.0));
+
+        StateReadResult result1 = new StateReadResult("op", entries1, List.of("key", "value"));
+        StateReadResult result2 = new StateReadResult("op", entries2, List.of("key", "value"));
+
+        // Act
+        Map<String, Object> diff = DiffEndpoint.computeDiff(
+            result1, result2, "op", "/chk-1", "/chk-2", 10, 10);
+
+        // Assert
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> modified = (List<Map<String, Object>>) diff.get("modified");
+        assertThat(modified).isEmpty();
+        assertThat(diff.get("totalModified")).isEqualTo(1);
+        assertThat(diff.get("offset")).isEqualTo(10);
+    }
+
+    @Test
+    void computeDiffIncludesTotalCountsInResponse() {
+        // Arrange
+        List<Map<String, Object>> entries1 = new ArrayList<>();
+        entries1.add(entry("sensor-0", 100.0));
+        entries1.add(entry("sensor-1", 200.0));
+
+        List<Map<String, Object>> entries2 = new ArrayList<>();
+        entries2.add(entry("sensor-0", 100.0));
+        entries2.add(entry("sensor-2", 300.0));
+
+        StateReadResult result1 = new StateReadResult("op", entries1, List.of("key", "value"));
+        StateReadResult result2 = new StateReadResult("op", entries2, List.of("key", "value"));
+
+        // Act
+        Map<String, Object> diff = DiffEndpoint.computeDiff(
+            result1, result2, "op", "/chk-1", "/chk-2", 0, 10000);
+
+        // Assert
+        assertThat(diff.get("totalAdded")).isEqualTo(1);
+        assertThat(diff.get("totalRemoved")).isEqualTo(1);
+        assertThat(diff.get("totalModified")).isEqualTo(0);
+        assertThat(diff.get("offset")).isEqualTo(0);
+    }
+
     private static Map<String, Object> entry(String key, Object value) {
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("key", key);

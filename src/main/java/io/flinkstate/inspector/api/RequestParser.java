@@ -56,4 +56,20 @@ public final class RequestParser {
         }
         return value;
     }
+
+    /**
+     * Returns the int value of a field, using {@code defaultValue} when absent.
+     * The returned value must be between 0 and {@link #MAX_LIMIT} (inclusive).
+     * Unlike {@link #intField}, this method allows zero as a valid value,
+     * making it suitable for offset parameters.
+     */
+    public static int intFieldAllowZero(JsonNode body, String fieldName, int defaultValue) {
+        JsonNode node = body.get(fieldName);
+        int value = node != null && node.isNumber() ? node.asInt() : defaultValue;
+        if (value < 0 || value > MAX_LIMIT) {
+            throw new IllegalArgumentException(
+                fieldName + " must be between 0 and " + MAX_LIMIT);
+        }
+        return value;
+    }
 }

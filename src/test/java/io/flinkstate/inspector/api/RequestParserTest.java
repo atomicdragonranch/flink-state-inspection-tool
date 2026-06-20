@@ -177,4 +177,62 @@ class RequestParserTest {
         // Assert
         assertThat(result).isFalse();
     }
+
+    @Test
+    void intFieldAllowZeroReturnsZeroDefault() throws Exception {
+        // Arrange
+        JsonNode body = json("{}");
+
+        // Act
+        int result = RequestParser.intFieldAllowZero(body, "offset", 0);
+
+        // Assert
+        assertThat(result).isEqualTo(0);
+    }
+
+    @Test
+    void intFieldAllowZeroAcceptsZeroValue() throws Exception {
+        // Arrange
+        JsonNode body = json("{\"offset\": 0}");
+
+        // Act
+        int result = RequestParser.intFieldAllowZero(body, "offset", 5);
+
+        // Assert
+        assertThat(result).isEqualTo(0);
+    }
+
+    @Test
+    void intFieldAllowZeroAcceptsPositiveValue() throws Exception {
+        // Arrange
+        JsonNode body = json("{\"offset\": 50}");
+
+        // Act
+        int result = RequestParser.intFieldAllowZero(body, "offset", 0);
+
+        // Assert
+        assertThat(result).isEqualTo(50);
+    }
+
+    @Test
+    void intFieldAllowZeroThrowsWhenNegative() throws Exception {
+        // Arrange
+        JsonNode body = json("{\"offset\": -1}");
+
+        // Act / Assert
+        assertThatThrownBy(() -> RequestParser.intFieldAllowZero(body, "offset", 0))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("offset must be between 0 and " + RequestParser.MAX_LIMIT);
+    }
+
+    @Test
+    void intFieldAllowZeroThrowsWhenAboveMaximum() throws Exception {
+        // Arrange
+        JsonNode body = json("{\"offset\": 200000}");
+
+        // Act / Assert
+        assertThatThrownBy(() -> RequestParser.intFieldAllowZero(body, "offset", 0))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("offset must be between 0 and " + RequestParser.MAX_LIMIT);
+    }
 }

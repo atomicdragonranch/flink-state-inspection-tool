@@ -20,6 +20,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import static io.flinkstate.inspector.api.RequestParser.intField;
+import static io.flinkstate.inspector.api.RequestParser.intFieldAllowZero;
 import static io.flinkstate.inspector.api.RequestParser.optionalField;
 import static io.flinkstate.inspector.api.RequestParser.requireField;
 
@@ -39,8 +41,11 @@ public final class DiffEndpoint {
             String path2 = requireField(body, "path2");
             String operatorUid = requireField(body, "operatorUid");
             String keyFilter = optionalField(body, "keyFilter");
+            int limit = intField(body, "limit", DEFAULT_LIMIT);
+            int offset = intFieldAllowZero(body, "offset", 0);
 
-            LOG.info("Diff keyed: path1={}, path2={}, operator={}", path1, path2, operatorUid);
+            LOG.info("Diff keyed: path1={}, path2={}, operator={}, offset={}, limit={}",
+                path1, path2, operatorUid, offset, limit);
 
             Map<String, String> config = DiscoveryEndpoint.extractConfig(body);
             String local1 = resolveLocalPath(path1, config);
@@ -52,7 +57,7 @@ public final class DiffEndpoint {
                 local2, operatorUid, keyFilter, false, DEFAULT_LIMIT);
 
             Map<String, Object> data = computeDiff(
-                result1, result2, operatorUid, path1, path2);
+                result1, result2, operatorUid, path1, path2, offset, limit);
             ctx.json(ApiResponse.success(data));
         });
 
@@ -63,9 +68,11 @@ public final class DiffEndpoint {
             String operatorUid = requireField(body, "operatorUid");
             String stateName = requireField(body, "stateName");
             String keyFilter = optionalField(body, "keyFilter");
+            int limit = intField(body, "limit", DEFAULT_LIMIT);
+            int offset = intFieldAllowZero(body, "offset", 0);
 
-            LOG.info("Diff broadcast: path1={}, path2={}, operator={}, state={}",
-                path1, path2, operatorUid, stateName);
+            LOG.info("Diff broadcast: path1={}, path2={}, operator={}, state={}, offset={}, limit={}",
+                path1, path2, operatorUid, stateName, offset, limit);
 
             Map<String, String> config = DiscoveryEndpoint.extractConfig(body);
             String local1 = resolveLocalPath(path1, config);
@@ -77,7 +84,7 @@ public final class DiffEndpoint {
                 local2, operatorUid, stateName, keyFilter, DEFAULT_LIMIT);
 
             Map<String, Object> data = computeDiff(
-                result1, result2, operatorUid, path1, path2);
+                result1, result2, operatorUid, path1, path2, offset, limit);
             ctx.json(ApiResponse.success(data));
         });
     }
@@ -85,6 +92,13 @@ public final class DiffEndpoint {
     static Map<String, Object> computeDiff(
             StateReadResult result1, StateReadResult result2,
             String operatorUid, String path1, String path2) {
+        return computeDiff(result1, result2, operatorUid, path1, path2, 0, DEFAULT_LIMIT);
+    }
+
+    static Map<String, Object> computeDiff(
+            StateReadResult result1, StateReadResult result2,
+            String operatorUid, String path1, String path2,
+            int offset, int limit) {
 
         Map<String, Map<String, Object>> map1 = indexByKey(result1.getEntries());
         Map<String, Map<String, Object>> map2 = indexByKey(result2.getEntries());
@@ -115,16 +129,31 @@ public final class DiffEndpoint {
             }
         }
 
+        int totalAdded = added.size();
+        int totalRemoved = removed.size();
+        int totalModified = modified.size();
+
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("operatorName", operatorUid);
         data.put("label1", extractLabel(path1));
         data.put("label2", extractLabel(path2));
-        data.put("added", added);
-        data.put("removed", removed);
-        data.put("modified", modified);
+        data.put("added", paginate(added, offset, limit));
+        data.put("removed", paginate(removed, offset, limit));
+        data.put("modified", paginate(modified, offset, limit));
         data.put("unchangedCount", unchangedCount);
         data.put("totalKeys", allKeys.size());
+        data.put("totalAdded", totalAdded);
+        data.put("totalRemoved", totalRemoved);
+        data.put("totalModified", totalModified);
+        data.put("offset", offset);
         return data;
+    }
+
+    private static <T> List<T> paginate(List<T> list, int offset, int limit) {
+        int size = list.size();
+        int from = Math.min(offset, size);
+        int to = Math.min(offset + limit, size);
+        return list.subList(from, to);
     }
 
     private static Map<String, Map<String, Object>> indexByKey(
