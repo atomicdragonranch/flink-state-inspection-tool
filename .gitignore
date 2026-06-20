@@ -19,6 +19,8 @@ Thumbs.db
 
 # Working artifacts
 claude-artifacts/
+*-REVIEW-*.md
+SECURITY-REVIEW-*.md
 test-checkpoint/
 rocksdb-check/
 QuickTest.java
