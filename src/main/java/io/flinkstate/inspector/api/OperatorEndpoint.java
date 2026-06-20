@@ -15,6 +15,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static io.flinkstate.inspector.api.RequestParser.requireField;
+
 public final class OperatorEndpoint {
 
     private static final Logger LOG = LoggerFactory.getLogger(OperatorEndpoint.class);
@@ -65,11 +67,4 @@ public final class OperatorEndpoint {
         return count;
     }
 
-    private static String requireField(JsonNode body, String fieldName) {
-        JsonNode node = body.get(fieldName);
-        if (node == null || node.asText().isEmpty()) {
-            throw new IllegalArgumentException("Missing required field: " + fieldName);
-        }
-        return node.asText();
-    }
 }

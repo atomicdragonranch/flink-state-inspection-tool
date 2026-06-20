@@ -20,6 +20,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import static io.flinkstate.inspector.api.RequestParser.optionalField;
+import static io.flinkstate.inspector.api.RequestParser.requireField;
+
 public final class DiffEndpoint {
 
     private static final Logger LOG = LoggerFactory.getLogger(DiffEndpoint.class);
@@ -213,19 +216,4 @@ public final class DiffEndpoint {
         return path;
     }
 
-    private static String requireField(JsonNode body, String fieldName) {
-        JsonNode node = body.get(fieldName);
-        if (node == null || node.asText().isEmpty()) {
-            throw new IllegalArgumentException("Missing required field: " + fieldName);
-        }
-        return node.asText();
-    }
-
-    private static String optionalField(JsonNode body, String fieldName) {
-        JsonNode node = body.get(fieldName);
-        if (node == null || node.isNull() || node.asText().isEmpty()) {
-            return null;
-        }
-        return node.asText();
-    }
 }

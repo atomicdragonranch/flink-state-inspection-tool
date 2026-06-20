@@ -19,6 +19,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static io.flinkstate.inspector.api.RequestParser.intField;
+import static io.flinkstate.inspector.api.RequestParser.requireField;
+
 public final class DiscoveryEndpoint {
 
     private static final Logger LOG = LoggerFactory.getLogger(DiscoveryEndpoint.class);
@@ -82,22 +85,6 @@ public final class DiscoveryEndpoint {
             result.add(cp);
         }
         return result;
-    }
-
-    private static String requireField(JsonNode body, String fieldName) {
-        JsonNode node = body.get(fieldName);
-        if (node == null || node.asText().isEmpty()) {
-            throw new IllegalArgumentException("Missing required field: " + fieldName);
-        }
-        return node.asText();
-    }
-
-    private static int intField(JsonNode body, String fieldName, int defaultValue) {
-        JsonNode node = body.get(fieldName);
-        if (node == null || node.isNull()) {
-            return defaultValue;
-        }
-        return node.asInt(defaultValue);
     }
 
     static Map<String, String> extractConfig(JsonNode body) {
