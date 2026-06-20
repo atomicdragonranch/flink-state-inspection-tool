@@ -38,6 +38,7 @@ export default function DiffPage() {
   const [path2, setPath2Local] = useState(initialPath2);
   const [diffType, setDiffType] = useState<DiffType>("keyed");
   const [selectedOperator, setSelectedOperator] = useState("");
+  const [selectedStateName, setSelectedStateName] = useState("");
   const [keyFilter, setKeyFilter] = useState("");
 
   const setPath1 = useCallback(
@@ -95,6 +96,7 @@ export default function DiffPage() {
         path1,
         path2,
         operatorUid: selectedOperator,
+        stateName: selectedStateName || undefined,
         keyFilter: keyFilter || undefined
       });
     }
@@ -109,6 +111,10 @@ export default function DiffPage() {
   );
   const visibleOperators =
     diffType === "keyed" ? keyedOperators : operatorStateOperators;
+
+  const selectedOp = operators.find(op => op.uid === selectedOperator);
+  const availableStateNames =
+    diffType === "broadcast" && selectedOp ? selectedOp.operatorStates : [];
 
   const result = activeMutation.data?.data;
 
@@ -198,6 +204,7 @@ export default function DiffPage() {
               if (val) {
                 setDiffType(val);
                 setSelectedOperator("");
+                setSelectedStateName("");
               }
             }}
             size="small"
@@ -212,9 +219,10 @@ export default function DiffPage() {
               labelId="diff-operator-label"
               value={selectedOperator}
               label="Operator"
-              onChange={(e: SelectChangeEvent) =>
-                setSelectedOperator(e.target.value)
-              }
+              onChange={(e: SelectChangeEvent) => {
+                setSelectedOperator(e.target.value);
+                setSelectedStateName("");
+              }}
               size="small"
               disabled={visibleOperators.length === 0}
             >
@@ -225,6 +233,27 @@ export default function DiffPage() {
               ))}
             </Select>
           </FormControl>
+
+          {diffType === "broadcast" && availableStateNames.length > 0 && (
+            <FormControl sx={{ minWidth: 250 }}>
+              <InputLabel id="diff-state-label">State Name</InputLabel>
+              <Select
+                labelId="diff-state-label"
+                value={selectedStateName}
+                label="State Name"
+                onChange={(e: SelectChangeEvent) =>
+                  setSelectedStateName(e.target.value)
+                }
+                size="small"
+              >
+                {availableStateNames.map(name => (
+                  <MenuItem key={name} value={name}>
+                    {name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
 
           <TextField
             label="Key Filter (optional)"
@@ -242,6 +271,7 @@ export default function DiffPage() {
               !path1 ||
               !path2 ||
               !selectedOperator ||
+              (diffType === "broadcast" && !selectedStateName) ||
               activeMutation.isPending
             }
             sx={{ whiteSpace: "nowrap" }}

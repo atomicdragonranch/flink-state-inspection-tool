@@ -126,19 +126,19 @@ public class DockerStorageConnector extends StorageConnector {
             tempDir = Files.createTempDirectory("flink-state-inspector-");
         }
         Path localDir = tempDir.resolve("full-chk-" + UUID.randomUUID().toString().substring(0, 8));
-        Files.createDirectories(localDir);
-        dockerCp(container, containerPath + "/.", localDir.toString());
+        dockerCp(container, containerPath, localDir.toString());
         LOG.info("Copied full checkpoint from {}:{} to {}", container, containerPath, localDir);
 
         String parentPath = containerPath.substring(0, containerPath.lastIndexOf('/'));
         String sharedPath = parentPath + "/shared";
         List<String> sharedCheck = execInContainer(
-            container, "ls", sharedPath);
-        if (!sharedCheck.isEmpty()) {
-            Path localShared = localDir.resolve("shared");
-            Files.createDirectories(localShared);
-            dockerCp(container, sharedPath + "/.", localShared.toString());
-            LOG.info("Copied shared state from {}:{} to {}", container, sharedPath, localShared);
+            container, "ls", "-d", sharedPath);
+        boolean sharedExists = sharedCheck.stream()
+            .anyMatch(l -> l.contains("shared") && !l.contains("No such"));
+        if (sharedExists) {
+            dockerCp(container, sharedPath, localDir.resolve("shared").toString());
+            LOG.info("Copied shared state from {}:{} to {}", container, sharedPath,
+                localDir.resolve("shared"));
         }
 
         return localDir.toString();
@@ -152,8 +152,6 @@ public class DockerStorageConnector extends StorageConnector {
                 tempDir = Files.createTempDirectory("flink-state-inspector-");
             }
             Path localDir = tempDir.resolve(UUID.randomUUID().toString());
-            Files.createDirectories(localDir);
-
             dockerCp(parsed[0], parsed[1], localDir.toString());
             LOG.info("Copied checkpoint from container {} to {}", parsed[0], localDir);
             return localDir.toString();
@@ -170,17 +168,8 @@ public class DockerStorageConnector extends StorageConnector {
 
     @Override
     public void close() {
-        if (tempDir != null) {
-            LOG.info("Cleaning up temp directory: {}", tempDir);
-            try {
-                Files.walk(tempDir)
-                    .sorted(Comparator.reverseOrder())
-                    .map(Path::toFile)
-                    .forEach(File::delete);
-            } catch (IOException e) {
-                LOG.warn("Failed to clean up temp directory: {}", tempDir, e);
-            }
-        }
+        // Temp files are managed by CheckpointCache (eviction + shutdown hook).
+        // Deleting here would destroy files the cache still references.
     }
 
     static String[] parseDockerUri(String uri) {
@@ -266,7 +255,16 @@ public class DockerStorageConnector extends StorageConnector {
         try {
             Process process = new ProcessBuilder("docker", "cp",
                 container + ":" + containerPath, localPath)
+                .redirectErrorStream(true)
                 .start();
+            List<String> output = new ArrayList<>();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.add(line);
+                }
+            }
             boolean finished = process.waitFor(CP_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
@@ -274,7 +272,8 @@ public class DockerStorageConnector extends StorageConnector {
             }
             int exitCode = process.exitValue();
             if (exitCode != 0) {
-                throw new IOException("docker cp exited with code " + exitCode);
+                String detail = String.join("; ", output);
+                throw new IOException("docker cp failed (exit " + exitCode + "): " + detail);
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

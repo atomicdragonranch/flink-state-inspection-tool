@@ -15,7 +15,7 @@ services:
         state.savepoints.dir: file:///tmp/flink-savepoints
         execution.checkpointing.interval: 30s
         execution.checkpointing.incremental: true
-        state.checkpoints.num-retained: 5
+        state.checkpoints.num-retained: 20
     volumes:
       - flink-checkpoints:/tmp/flink-checkpoints
       - flink-savepoints:/tmp/flink-savepoints
