@@ -21,6 +21,16 @@ Compatible with savepoints from Flink 1.x and 2.x (the State Processor API maint
 
 ## Web UI
 
+### Screenshots
+
+| Browse | Inspect | Diff |
+|--------|---------|------|
+| ![Browse snapshots](docs/images/browse-snapshots.png) | ![Inspect state](docs/images/inspect-state.png) | ![Diff summary](docs/images/diff-summary.png) |
+| Checkpoint discovery and listing | Keyed state entries with expandable JSON | Side-by-side state comparison |
+
+![Side-by-side diff](docs/images/diff-side-by-side.png)
+*Field-level comparison between two checkpoints*
+
 The primary interface is a React web dashboard served by the built-in Javalin server:
 
 ```bash
@@ -131,8 +141,9 @@ graph TD
     Commands --> Reader[Generic State Reader]
     Commands --> Diff[Diff Engine]
 
-    Discovery --> Storage[StorageConnector]
-    Reader --> Storage
+    Discovery --> Cache[Cache]
+    Reader --> Cache
+    Cache --> Storage[StorageConnector]
 
     Storage --> Local[Local FS]
     Storage --> S3[AWS S3]
@@ -170,7 +181,7 @@ cd ui && npm run dev     # start UI dev server (for development)
 mvn test
 ```
 
-53 unit tests covering metadata parsing, operator discovery, state deserialization, storage connectors, CLI options, and API endpoints.
+103 unit tests covering metadata parsing, operator discovery, state deserialization (keyed + operator), storage connectors, CLI options, API endpoints, diff logic, and path validation.
 
 ### Integration Tests
 
@@ -228,11 +239,13 @@ Under active development. See the [issue tracker](https://github.com/atomicdrago
 - Web UI with browse, inspect, diff, and cache management views
 - Checkpoint cache for re-inspection and diffing
 - Raw bytes fallback for undeserializable state values
+- Operator state reading (broadcast, union, split-distribute)
+- Keyed and operator state diff comparison
 
 **Planned:**
 - GCS connector (#4)
-- Operator (broadcast) state reading
-- FRocksDB-format SST file support (Flink's bundled FRocksDB uses a different SST magic number than standard RocksDB)
+- FRocksDB-format SST file support
+- ReducingState and AggregatingState support (#17)
 
 ## License
 
