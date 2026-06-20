@@ -3,7 +3,10 @@ package io.flinkstate.inspector.reader;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.common.typeutils.TypeSerializerSnapshot;
+import org.apache.flink.api.common.typeutils.base.ListSerializer;
+import org.apache.flink.api.common.typeutils.base.MapSerializer;
 import org.apache.flink.core.memory.DataInputDeserializer;
+import org.apache.flink.runtime.state.ArrayListSerializer;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.runtime.checkpoint.Checkpoints;
 import org.apache.flink.runtime.checkpoint.OperatorState;
@@ -69,21 +72,39 @@ public final class GenericStateReader {
                 }
                 String stateType = info.getOption(
                     StateMetaInfoSnapshot.CommonOptionsKeys.KEYED_STATE_TYPE);
-                TypeSerializer valueSerializer = info
+
+                TypeSerializerSnapshot<?> valueSnapshot = info
                     .getTypeSerializerSnapshot(
-                        StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER)
-                    .restoreSerializer();
+                        StateMetaInfoSnapshot.CommonSerializerKeys.VALUE_SERIALIZER);
+                if (valueSnapshot == null) {
+                    LOG.warn("Skipping state '{}': no VALUE_SERIALIZER snapshot (type={})",
+                        info.getName(), stateType);
+                    continue;
+                }
+                TypeSerializer valueSerializer = valueSnapshot.restoreSerializer();
 
                 TypeSerializer mapKeySerializer = null;
+                TypeSerializer mapValueSerializer = null;
+                TypeSerializer listElementSerializer = null;
                 if ("MAP".equals(stateType)) {
-                    mapKeySerializer = info
-                        .getTypeSerializerSnapshot(
-                            StateMetaInfoSnapshot.CommonSerializerKeys.KEY_SERIALIZER)
-                        .restoreSerializer();
+                    if (valueSerializer instanceof MapSerializer) {
+                        MapSerializer<?, ?> mapSer = (MapSerializer<?, ?>) valueSerializer;
+                        mapKeySerializer = mapSer.getKeySerializer();
+                        mapValueSerializer = mapSer.getValueSerializer();
+                    }
+                } else if ("LIST".equals(stateType)) {
+                    if (valueSerializer instanceof ListSerializer) {
+                        listElementSerializer =
+                            ((ListSerializer<?>) valueSerializer).getElementSerializer();
+                    } else if (valueSerializer instanceof ArrayListSerializer) {
+                        listElementSerializer =
+                            ((ArrayListSerializer<?>) valueSerializer).getElementSerializer();
+                    }
                 }
 
                 StateDescriptorEntry sde = new StateDescriptorEntry(
-                    info.getName(), stateType, valueSerializer, mapKeySerializer);
+                    info.getName(), stateType, valueSerializer,
+                    mapKeySerializer, mapValueSerializer, listElementSerializer);
                 sdEntries.add(sde);
                 stateByName.put(info.getName(), sde);
             }
@@ -107,6 +128,22 @@ public final class GenericStateReader {
 
                     StateDescriptorEntry sde = stateByName.get(cfName);
                     if (sde == null) continue;
+
+                    TypeSerializer nsSerializer = null;
+                    if ("MAP".equals(sde.stateType)) {
+                        for (StateMetaInfoSnapshot info : opInfo.stateInfos) {
+                            if (info.getName().equals(cfName)) {
+                                TypeSerializerSnapshot<?> nsSnap = info
+                                    .getTypeSerializerSnapshot(
+                                        StateMetaInfoSnapshot.CommonSerializerKeys
+                                            .NAMESPACE_SERIALIZER);
+                                if (nsSnap != null) {
+                                    nsSerializer = nsSnap.restoreSerializer();
+                                }
+                                break;
+                            }
+                        }
+                    }
 
                     try (ReadOptions readOpts = new ReadOptions();
                          SstFileReaderIterator iter = reader.newIterator(readOpts)) {
@@ -135,8 +172,38 @@ public final class GenericStateReader {
                                     return e;
                                 });
 
-                            Object value = deserializeValue(sde, rawValue);
-                            entry.put(sde.name, value);
+                            if ("MAP".equals(sde.stateType)
+                                    && sde.mapKeySerializer != null
+                                    && sde.mapValueSerializer != null) {
+                                Object mapKey = extractMapKey(rawKey, keyGroupPrefixBytes,
+                                    keySerializer, nsSerializer, sde.mapKeySerializer);
+                                if (mapKey != null) {
+                                    try {
+                                        DataInputDeserializer valInput =
+                                            new DataInputDeserializer(rawValue);
+                                        if (rawValue.length > 0 && rawValue[0] == 0x00) {
+                                            valInput.skipBytesToRead(1);
+                                        }
+                                        Object mapVal = sde.mapValueSerializer
+                                            .deserialize(valInput);
+                                        @SuppressWarnings("unchecked")
+                                        Map<String, Object> map = (Map<String, Object>)
+                                            entry.computeIfAbsent(sde.name,
+                                                n -> new LinkedHashMap<>());
+                                        map.put(String.valueOf(mapKey), mapVal);
+                                    } catch (Exception ex) {
+                                        entry.put(sde.name, rawBytesMap(rawValue,
+                                            ex.getClass().getSimpleName()
+                                            + ": " + ex.getMessage()));
+                                    }
+                                } else {
+                                    Object value = deserializeValue(sde, rawValue);
+                                    entry.put(sde.name, value);
+                                }
+                            } else {
+                                Object value = deserializeValue(sde, rawValue);
+                                entry.put(sde.name, value);
+                            }
 
                             iter.next();
                         }
@@ -180,9 +247,14 @@ public final class GenericStateReader {
                 case "VALUE":
                     return sde.valueSerializer.deserialize(valueInput);
                 case "LIST": {
+                    TypeSerializer elemSer = sde.listElementSerializer != null
+                        ? sde.listElementSerializer : sde.valueSerializer;
                     List<Object> items = new ArrayList<>();
                     while (valueInput.available() > 0) {
-                        items.add(sde.valueSerializer.deserialize(valueInput));
+                        items.add(elemSer.deserialize(valueInput));
+                        if (valueInput.available() > 0) {
+                            valueInput.skipBytesToRead(1);
+                        }
                     }
                     return items;
                 }
@@ -230,16 +302,48 @@ public final class GenericStateReader {
             String localCheckpointPath) throws Exception {
         List<String> paths = new ArrayList<>();
         for (HandleAndLocalPath hp : handle.getSharedState()) {
-            if (!hp.getLocalPath().endsWith(".sst")) continue;
+            String lp = hp.getLocalPath();
+            if (lp != null && !lp.endsWith(".sst") && !isSstHandle(hp)) continue;
             String resolved = resolveHandlePath(hp.getHandle(), localCheckpointPath);
             if (resolved != null) paths.add(resolved);
         }
         for (HandleAndLocalPath hp : handle.getPrivateState()) {
-            if (!hp.getLocalPath().endsWith(".sst")) continue;
+            String lp = hp.getLocalPath();
+            if (lp != null && !lp.endsWith(".sst") && !isSstHandle(hp)) continue;
             String resolved = resolveHandlePath(hp.getHandle(), localCheckpointPath);
             if (resolved != null) paths.add(resolved);
         }
         return paths;
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static Object extractMapKey(byte[] rawKey, int keyGroupPrefixBytes,
+            TypeSerializer keySerializer, TypeSerializer nsSerializer,
+            TypeSerializer mapKeySerializer) {
+        int keyStart = keyGroupPrefixBytes;
+        int keyLen = rawKey.length - keyStart;
+        if (keyLen < 2) return null;
+        try {
+            DataInputDeserializer in = new DataInputDeserializer(rawKey, keyStart, keyLen);
+            keySerializer.deserialize(in);
+            if (nsSerializer != null) {
+                nsSerializer.deserialize(in);
+            }
+            if (in.available() > 0) {
+                return mapKeySerializer.deserialize(in);
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private static boolean isSstHandle(HandleAndLocalPath hp) {
+        StreamStateHandle h = hp.getHandle();
+        if (h instanceof FileStateHandle) {
+            String name = ((FileStateHandle) h).getFilePath().getName();
+            return name.endsWith(".sst") || !name.contains(".");
+        }
+        return true;
     }
 
     private static String resolveHandlePath(
@@ -252,6 +356,8 @@ public final class GenericStateReader {
             String fileName = ((FileStateHandle) handle).getFilePath().getName();
             File f = new File(localCheckpointPath, fileName);
             if (f.exists()) return f.getAbsolutePath();
+            File shared = new File(localCheckpointPath, "shared/" + fileName);
+            if (shared.exists()) return shared.getAbsolutePath();
         }
         try (InputStream in = handle.openInputStream()) {
             File tempFile = File.createTempFile("sst-", ".sst",
@@ -355,14 +461,23 @@ public final class GenericStateReader {
         final TypeSerializer valueSerializer;
         @SuppressWarnings("rawtypes")
         final TypeSerializer mapKeySerializer;
+        @SuppressWarnings("rawtypes")
+        final TypeSerializer mapValueSerializer;
+        @SuppressWarnings("rawtypes")
+        final TypeSerializer listElementSerializer;
 
         @SuppressWarnings("rawtypes")
         StateDescriptorEntry(String name, String stateType,
-                             TypeSerializer valueSerializer, TypeSerializer mapKeySerializer) {
+                             TypeSerializer valueSerializer,
+                             TypeSerializer mapKeySerializer,
+                             TypeSerializer mapValueSerializer,
+                             TypeSerializer listElementSerializer) {
             this.name = name;
             this.stateType = stateType;
             this.valueSerializer = valueSerializer;
             this.mapKeySerializer = mapKeySerializer;
+            this.mapValueSerializer = mapValueSerializer;
+            this.listElementSerializer = listElementSerializer;
         }
     }
 }

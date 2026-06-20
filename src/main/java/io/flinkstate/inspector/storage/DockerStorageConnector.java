@@ -123,6 +123,18 @@ public class DockerStorageConnector extends StorageConnector {
         Files.createDirectories(localDir);
         dockerCp(container, containerPath + "/.", localDir.toString());
         LOG.info("Copied full checkpoint from {}:{} to {}", container, containerPath, localDir);
+
+        String parentPath = containerPath.substring(0, containerPath.lastIndexOf('/'));
+        String sharedPath = parentPath + "/shared";
+        List<String> sharedCheck = execInContainer(
+            container, "sh", "-c", "test -d '" + sharedPath + "' && echo ok");
+        if (sharedCheck.stream().anyMatch(l -> l.contains("ok"))) {
+            Path localShared = localDir.resolve("shared");
+            Files.createDirectories(localShared);
+            dockerCp(container, sharedPath + "/.", localShared.toString());
+            LOG.info("Copied shared state from {}:{} to {}", container, sharedPath, localShared);
+        }
+
         return localDir.toString();
     }
 

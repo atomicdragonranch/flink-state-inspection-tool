@@ -60,10 +60,12 @@ class GenericStateReaderTest {
     @SuppressWarnings("unchecked")
     @Test
     void deserializeValueHandlesList() throws Exception {
-        // Arrange
+        // Arrange - RocksDB list format: elements separated by 0x2c merge delimiter
         DataOutputSerializer out = new DataOutputSerializer(64);
         StringSerializer.INSTANCE.serialize("a", out);
+        out.write(0x2c);
         StringSerializer.INSTANCE.serialize("b", out);
+        out.write(0x2c);
         StringSerializer.INSTANCE.serialize("c", out);
         byte[] serialized = out.getCopyOfBuffer();
         GenericStateReader.StateDescriptorEntry sde = listEntry("items", StringSerializer.INSTANCE);
@@ -125,7 +127,7 @@ class GenericStateReaderTest {
         // Arrange
         byte[] data = {0x0A, 0x0B};
         GenericStateReader.StateDescriptorEntry sde =
-            new GenericStateReader.StateDescriptorEntry("x", "REDUCING", StringSerializer.INSTANCE, null);
+            new GenericStateReader.StateDescriptorEntry("x", "REDUCING", StringSerializer.INSTANCE, null, null, null);
 
         // Act
         Object result = GenericStateReader.deserializeValue(sde, data);
@@ -220,13 +222,13 @@ class GenericStateReaderTest {
     @SuppressWarnings("rawtypes")
     private static GenericStateReader.StateDescriptorEntry valueEntry(
             String name, org.apache.flink.api.common.typeutils.TypeSerializer serializer) {
-        return new GenericStateReader.StateDescriptorEntry(name, "VALUE", serializer, null);
+        return new GenericStateReader.StateDescriptorEntry(name, "VALUE", serializer, null, null, null);
     }
 
     @SuppressWarnings("rawtypes")
     private static GenericStateReader.StateDescriptorEntry listEntry(
             String name, org.apache.flink.api.common.typeutils.TypeSerializer serializer) {
-        return new GenericStateReader.StateDescriptorEntry(name, "LIST", serializer, null);
+        return new GenericStateReader.StateDescriptorEntry(name, "LIST", serializer, null, null, serializer);
     }
 
     @SuppressWarnings("rawtypes")
@@ -234,6 +236,6 @@ class GenericStateReaderTest {
             String name,
             org.apache.flink.api.common.typeutils.TypeSerializer valueSerializer,
             org.apache.flink.api.common.typeutils.TypeSerializer mapKeySerializer) {
-        return new GenericStateReader.StateDescriptorEntry(name, "MAP", valueSerializer, mapKeySerializer);
+        return new GenericStateReader.StateDescriptorEntry(name, "MAP", valueSerializer, mapKeySerializer, null, null);
     }
 }

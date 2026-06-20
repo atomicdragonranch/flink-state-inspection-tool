@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.flinkstate.inspector.reader.GenericStateReader;
 import io.flinkstate.inspector.reader.OperatorStateReader;
 import io.flinkstate.inspector.reader.StateReadResult;
+import io.flinkstate.inspector.storage.CheckpointCache;
 import io.flinkstate.inspector.storage.StorageConnector;
 import io.flinkstate.inspector.storage.StorageConnectorFactory;
 import io.javalin.Javalin;
@@ -34,9 +35,11 @@ public final class InspectEndpoint {
 
             LOG.info("Inspect keyed: path={}, operator={}", path, operatorUid);
 
+            String cachedPath = CheckpointCache.getInstance().lookupLocalPath(path);
             Map<String, String> connectorConfig = DiscoveryEndpoint.extractConfig(body);
             try (StorageConnector connector = StorageConnectorFactory.create(path, connectorConfig)) {
-                String localPath = connector.resolveFullCheckpoint(path);
+                String localPath = cachedPath != null ? cachedPath
+                    : connector.resolveFullCheckpoint(path);
                 StateReadResult result = GenericStateReader.readKeyedState(
                     localPath, operatorUid, keyFilter, keysOnly, limit);
 
@@ -76,9 +79,11 @@ public final class InspectEndpoint {
             LOG.info("Inspect operator state: path={}, operator={}, state={}",
                 path, operatorUid, stateName);
 
+            String cachedPath = CheckpointCache.getInstance().lookupLocalPath(path);
             Map<String, String> connectorConfig = DiscoveryEndpoint.extractConfig(body);
             try (StorageConnector connector = StorageConnectorFactory.create(path, connectorConfig)) {
-                String localPath = connector.resolveFullCheckpoint(path);
+                String localPath = cachedPath != null ? cachedPath
+                    : connector.resolveFullCheckpoint(path);
                 StateReadResult result = OperatorStateReader.readOperatorState(
                     localPath, operatorUid, stateName, keyFilter, limit);
 

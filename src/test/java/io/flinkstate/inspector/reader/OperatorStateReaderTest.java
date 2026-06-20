@@ -205,23 +205,23 @@ class OperatorStateReaderTest {
 
     @SuppressWarnings("unchecked")
     @Test
-    void presentValueConvertsbyteArrayToRawMap() {
-        // Arrange
-        byte[] data = {0x00, 0x05, 'h', 'e', 'l', 'l', 'o', 0x00};
+    void presentValueParsesStructuredFields() {
+        // Arrange: 4-byte int (35) + 2-byte string length (5) + "hello" + 4-byte int (99)
+        byte[] data = {
+            0x00, 0x00, 0x00, 0x23,
+            0x00, 0x05, 'h', 'e', 'l', 'l', 'o',
+            0x00, 0x00, 0x00, 0x63
+        };
 
         // Act
         Object result = OperatorStateReader.presentValue(data);
 
         // Assert
         assertThat(result).isInstanceOf(Map.class);
-        Map<String, Object> raw = (Map<String, Object>) result;
-        assertThat(raw.get("_raw")).isEqualTo(true);
-        assertThat(raw.get("_bytes")).isEqualTo(8);
-        assertThat(raw).containsKey("_hex");
-        assertThat(raw).containsKey("_base64");
-        assertThat(raw).containsKey("_strings");
-        List<String> strings = (List<String>) raw.get("_strings");
-        assertThat(strings).contains("hello");
+        Map<String, Object> fields = (Map<String, Object>) result;
+        assertThat(fields.get("field_0")).isEqualTo(35);
+        assertThat(fields.get("field_1")).isEqualTo("hello");
+        assertThat(fields.get("field_2")).isEqualTo(99);
     }
 
     @Test
@@ -233,31 +233,55 @@ class OperatorStateReaderTest {
         assertThat(OperatorStateReader.presentValue(null)).isNull();
     }
 
-    // --- extractStrings tests ---
-
+    @SuppressWarnings("unchecked")
     @Test
-    void extractStringsFindsEmbeddedText() {
-        // Arrange
-        byte[] data = {0x00, 0x00, 's', 't', 'r', 'e', 'a', 'm', '-',
-            'e', 'v', 'e', 'n', 't', 's', 0x00, 0x00};
+    void presentValueFallsBackToRawForTinyData() {
+        // Arrange: less than 4 bytes, too small to parse
+        byte[] data = {0x01, 0x02};
 
         // Act
-        List<String> strings = OperatorStateReader.extractStrings(data);
+        Object result = OperatorStateReader.presentValue(data);
 
         // Assert
-        assertThat(strings).containsExactly("stream-events");
+        assertThat(result).isInstanceOf(Map.class);
+        Map<String, Object> raw = (Map<String, Object>) result;
+        assertThat(raw.get("_raw")).isEqualTo(true);
+        assertThat(raw.get("_bytes")).isEqualTo(2);
+    }
+
+    // --- parseStructuredFields tests ---
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void parseStructuredFieldsExtractsIntAndString() {
+        // Arrange: mimics Kafka SourceReaderState format
+        byte[] data = {
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x23,  // long = 35
+            0x00, 0x0d,                                          // string length = 13
+            's', 't', 'r', 'e', 'a', 'm', '-', 'e', 'v', 'e', 'n', 't', 's',
+            0x00, 0x00, 0x00, 0x03,                              // int = 3
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x7c      // long = 1660
+        };
+
+        // Act
+        Map<String, Object> fields = OperatorStateReader.parseStructuredFields(data);
+
+        // Assert
+        assertThat(fields).isNotNull();
+        assertThat(fields.get("field_1")).isEqualTo("stream-events");
+        assertThat(fields.get("field_2")).isEqualTo(3);
     }
 
     @Test
-    void extractStringsIgnoresShortRuns() {
+    void parseStructuredFieldsReturnsNullForTinyData() {
         // Arrange
-        byte[] data = {0x00, 'a', 'b', 0x00};
+        byte[] data = {0x01, 0x02};
 
         // Act
-        List<String> strings = OperatorStateReader.extractStrings(data);
+        Map<String, Object> result = OperatorStateReader.parseStructuredFields(data);
 
         // Assert
-        assertThat(strings).isEmpty();
+        assertThat(result).isNull();
     }
 
     // --- helpers ---

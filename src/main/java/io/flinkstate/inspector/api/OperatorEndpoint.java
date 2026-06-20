@@ -56,7 +56,7 @@ public final class OperatorEndpoint {
         java.io.File[] files = checkpointDir.listFiles();
         if (files == null) return 0;
         for (java.io.File f : files) {
-            if (f.isFile() && f.getName().endsWith(".sst")) {
+            if (f.isFile() && (f.getName().endsWith(".sst") || !f.getName().contains("."))) {
                 count++;
             } else if (f.isDirectory()) {
                 count += countSstFiles(f);

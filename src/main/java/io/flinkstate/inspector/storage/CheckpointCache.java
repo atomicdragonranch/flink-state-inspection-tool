@@ -34,6 +34,16 @@ public final class CheckpointCache {
         LOG.info("Cached checkpoint: {} -> {} ({} bytes)", sourcePath, localPath, size);
     }
 
+    public String lookupLocalPath(String sourcePath) {
+        for (CacheEntry entry : entries.values()) {
+            if (entry.sourcePath().equals(sourcePath)) {
+                File dir = new File(entry.localPath());
+                if (dir.exists()) return entry.localPath();
+            }
+        }
+        return null;
+    }
+
     public List<Map<String, Object>> listEntries() {
         return entries.values().stream()
             .sorted(Comparator.comparingLong(CacheEntry::cachedAt).reversed())

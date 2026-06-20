@@ -31,8 +31,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Arrays;
 
 public final class OperatorStateReader {
 
@@ -247,6 +246,11 @@ public final class OperatorStateReader {
             }
         }
 
+        Map<String, Object> structured = parseStructuredFields(raw);
+        if (structured != null) {
+            return structured;
+        }
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("_raw", true);
         result.put("_bytes", raw.length);
@@ -254,23 +258,120 @@ public final class OperatorStateReader {
         if (raw.length <= 1024) {
             result.put("_base64", java.util.Base64.getEncoder().encodeToString(raw));
         }
-        List<String> strings = extractStrings(raw);
-        if (!strings.isEmpty()) {
-            result.put("_strings", strings);
-        }
         return result;
     }
 
-    private static final Pattern PRINTABLE = Pattern.compile("[\\x20-\\x7E]{3,}");
+    static Map<String, Object> parseStructuredFields(byte[] data) {
+        if (data.length < 4) return null;
 
-    static List<String> extractStrings(byte[] data) {
-        String text = new String(data, StandardCharsets.ISO_8859_1);
-        Matcher m = PRINTABLE.matcher(text);
-        List<String> found = new ArrayList<>();
-        while (m.find() && found.size() < 20) {
-            found.add(m.group());
+        Map<String, Object> fields = new LinkedHashMap<>();
+        int pos = 0;
+        int fieldNum = 0;
+
+        try {
+            while (pos < data.length) {
+                int remaining = data.length - pos;
+
+                if (remaining >= 2) {
+                    int strLen = ((data[pos] & 0xFF) << 8) | (data[pos + 1] & 0xFF);
+                    if (strLen > 0 && strLen <= remaining - 2 && isUtf8String(data, pos + 2, strLen)) {
+                        String s = new String(data, pos + 2, strLen, StandardCharsets.UTF_8);
+                        fields.put("field_" + fieldNum++, s);
+                        pos += 2 + strLen;
+                        continue;
+                    }
+                }
+
+                if (remaining >= 8) {
+                    long longVal = readLong(data, pos);
+                    if (remaining >= 12) {
+                        int nextStrLen = -1;
+                        if (pos + 8 + 2 <= data.length) {
+                            nextStrLen = ((data[pos + 8] & 0xFF) << 8) | (data[pos + 8 + 1] & 0xFF);
+                        }
+                        if (nextStrLen > 0 && pos + 8 + 2 + nextStrLen <= data.length
+                                && isUtf8String(data, pos + 10, nextStrLen)) {
+                            fields.put("field_" + fieldNum++, longVal);
+                            pos += 8;
+                            continue;
+                        }
+                    }
+
+                    if (remaining >= 4) {
+                        int intVal = readInt(data, pos);
+                        if (intVal >= -1_000_000 && intVal <= 10_000_000 && remaining >= 8) {
+                            fields.put("field_" + fieldNum++, intVal);
+                            pos += 4;
+                            continue;
+                        }
+
+                        if (longVal >= -1_000_000_000_000L && longVal <= 10_000_000_000_000L) {
+                            fields.put("field_" + fieldNum++, longVal);
+                            pos += 8;
+                            continue;
+                        }
+
+                        fields.put("field_" + fieldNum++, intVal);
+                        pos += 4;
+                        continue;
+                    }
+                }
+
+                if (remaining >= 4) {
+                    fields.put("field_" + fieldNum++, readInt(data, pos));
+                    pos += 4;
+                    continue;
+                }
+
+                fields.put("field_" + fieldNum++,
+                    GenericStateReader.bytesToHex(
+                        java.util.Arrays.copyOfRange(data, pos, data.length), 256));
+                break;
+            }
+        } catch (Exception e) {
+            return null;
         }
-        return found;
+
+        if (fields.size() < 2) return null;
+        return fields;
+    }
+
+    private static boolean isUtf8String(byte[] data, int offset, int len) {
+        if (offset + len > data.length) return false;
+        int printable = 0;
+        for (int i = 0; i < len; i++) {
+            int b = data[offset + i] & 0xFF;
+            if (b >= 0x20 && b <= 0x7E) {
+                printable++;
+            } else if (b == 0x09 || b == 0x0A || b == 0x0D) {
+                // tabs and newlines are ok
+            } else if (b >= 0xC0 && b <= 0xF7) {
+                // multi-byte UTF-8 lead byte, ok
+            } else if (b >= 0x80 && b <= 0xBF) {
+                // UTF-8 continuation byte, ok
+            } else {
+                return false;
+            }
+        }
+        return printable > len / 2;
+    }
+
+    private static int readInt(byte[] data, int pos) {
+        return ((data[pos] & 0xFF) << 24)
+             | ((data[pos + 1] & 0xFF) << 16)
+             | ((data[pos + 2] & 0xFF) << 8)
+             | (data[pos + 3] & 0xFF);
+    }
+
+    private static long readLong(byte[] data, int pos) {
+        return ((long)(data[pos] & 0xFF) << 56)
+             | ((long)(data[pos + 1] & 0xFF) << 48)
+             | ((long)(data[pos + 2] & 0xFF) << 40)
+             | ((long)(data[pos + 3] & 0xFF) << 32)
+             | ((long)(data[pos + 4] & 0xFF) << 24)
+             | ((long)(data[pos + 5] & 0xFF) << 16)
+             | ((long)(data[pos + 6] & 0xFF) << 8)
+             | (long)(data[pos + 7] & 0xFF);
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
