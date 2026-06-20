@@ -25,7 +25,7 @@ public class ServeCommand implements Runnable {
     @CommandLine.Option(names = {"--port", "-p"}, description = "HTTP port", defaultValue = "9741")
     private int port;
 
-    @CommandLine.Option(names = {"--host"}, description = "Bind address", defaultValue = "0.0.0.0")
+    @CommandLine.Option(names = {"--host"}, description = "Bind address", defaultValue = "127.0.0.1")
     private String host;
 
     @CommandLine.Mixin
@@ -36,14 +36,16 @@ public class ServeCommand implements Runnable {
         Javalin app = Javalin.create(config -> {
             config.staticFiles.add("/public", Location.CLASSPATH);
             config.spaRoot.addFile("/", "/public/index.html", Location.CLASSPATH);
+            config.http.maxRequestSize = 1_048_576L;
+            config.plugins.enableCors(cors -> cors.add(it -> {
+                it.allowHost("http://localhost:" + port, "http://127.0.0.1:" + port);
+            }));
         });
 
         app.exception(Exception.class, (e, ctx) -> {
             LOG.debug("API error", e);
             ctx.status(500);
-            ctx.json(ApiResponse.error(
-                ErrorDisplay.extractRootCause(e),
-                ErrorDisplay.getStackTrace(e)));
+            ctx.json(ApiResponse.error(ErrorDisplay.extractRootCause(e)));
         });
 
         app.exception(IllegalArgumentException.class, (e, ctx) -> {

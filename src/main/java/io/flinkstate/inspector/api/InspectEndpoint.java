@@ -20,6 +20,7 @@ public final class InspectEndpoint {
     private static final Logger LOG = LoggerFactory.getLogger(InspectEndpoint.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int DEFAULT_LIMIT = 1000;
+    private static final int MAX_LIMIT = 100_000;
 
     private InspectEndpoint() {
     }
@@ -50,21 +51,6 @@ public final class InspectEndpoint {
                 data.put("columns", result.getColumns());
                 data.put("entries", result.getEntries());
                 ctx.json(ApiResponse.success(data));
-            } catch (Exception e) {
-                LOG.error("Failed to read keyed state", e);
-                String rootCause = e.getMessage();
-                Throwable cause = e.getCause();
-                while (cause != null) {
-                    rootCause = cause.getClass().getSimpleName() + ": " + cause.getMessage();
-                    cause = cause.getCause();
-                }
-                ctx.status(500);
-                Map<String, Object> err = new LinkedHashMap<>();
-                err.put("error", rootCause);
-                java.io.StringWriter sw = new java.io.StringWriter();
-                e.printStackTrace(new java.io.PrintWriter(sw));
-                err.put("stackTrace", sw.toString());
-                ctx.json(err);
             }
         });
 
@@ -94,21 +80,6 @@ public final class InspectEndpoint {
                 data.put("columns", result.getColumns());
                 data.put("entries", result.getEntries());
                 ctx.json(ApiResponse.success(data));
-            } catch (Exception e) {
-                LOG.error("Failed to read operator state", e);
-                String rootCause = e.getMessage();
-                Throwable cause = e.getCause();
-                while (cause != null) {
-                    rootCause = cause.getClass().getSimpleName() + ": " + cause.getMessage();
-                    cause = cause.getCause();
-                }
-                ctx.status(500);
-                Map<String, Object> err = new LinkedHashMap<>();
-                err.put("error", rootCause);
-                java.io.StringWriter sw = new java.io.StringWriter();
-                e.printStackTrace(new java.io.PrintWriter(sw));
-                err.put("stackTrace", sw.toString());
-                ctx.json(err);
             }
         });
     }
@@ -136,6 +107,11 @@ public final class InspectEndpoint {
 
     private static int intField(JsonNode body, String fieldName, int defaultValue) {
         JsonNode node = body.get(fieldName);
-        return node != null && node.isNumber() ? node.asInt() : defaultValue;
+        int value = node != null && node.isNumber() ? node.asInt() : defaultValue;
+        if (value < 1 || value > MAX_LIMIT) {
+            throw new IllegalArgumentException(
+                fieldName + " must be between 1 and " + MAX_LIMIT);
+        }
+        return value;
     }
 }

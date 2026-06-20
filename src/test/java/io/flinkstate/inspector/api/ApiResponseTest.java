@@ -50,15 +50,15 @@ class ApiResponseTest {
     }
 
     @Test
-    void errorResponseWithStackTrace() throws Exception {
+    void errorResponseDoesNotContainStackTrace() throws Exception {
         // Arrange
-        ApiResponse<?> response = ApiResponse.error("msg", "stack trace here");
+        ApiResponse<?> response = ApiResponse.error("msg");
 
         // Act
         String json = MAPPER.writeValueAsString(response);
 
         // Assert
         assertThat(json).contains("\"error\":\"msg\"");
-        assertThat(json).contains("\"stackTrace\":\"stack trace here\"");
+        assertThat(json).doesNotContain("stackTrace");
     }
 }

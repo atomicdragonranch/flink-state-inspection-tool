@@ -9,39 +9,31 @@ public final class ApiResponse<T> {
     private Boolean partialRead;
     private String partialReadCause;
     private String error;
-    private String stackTrace;
 
     private ApiResponse() {
     }
 
-    private ApiResponse(T data, Boolean partialRead, String partialReadCause,
-                        String error, String stackTrace) {
+    private ApiResponse(T data, Boolean partialRead, String partialReadCause, String error) {
         this.data = data;
         this.partialRead = partialRead;
         this.partialReadCause = partialReadCause;
         this.error = error;
-        this.stackTrace = stackTrace;
     }
 
     public static <T> ApiResponse<T> success(T data) {
-        return new ApiResponse<>(data, null, null, null, null);
+        return new ApiResponse<>(data, null, null, null);
     }
 
     public static <T> ApiResponse<T> successWithPartialRead(T data, String cause) {
-        return new ApiResponse<>(data, true, cause, null, null);
+        return new ApiResponse<>(data, true, cause, null);
     }
 
     public static <T> ApiResponse<T> error(String message) {
-        return new ApiResponse<>(null, null, null, message, null);
-    }
-
-    public static <T> ApiResponse<T> error(String message, String stackTrace) {
-        return new ApiResponse<>(null, null, null, message, stackTrace);
+        return new ApiResponse<>(null, null, null, message);
     }
 
     public T getData() { return data; }
     public Boolean getPartialRead() { return partialRead; }
     public String getPartialReadCause() { return partialReadCause; }
     public String getError() { return error; }
-    public String getStackTrace() { return stackTrace; }
 }

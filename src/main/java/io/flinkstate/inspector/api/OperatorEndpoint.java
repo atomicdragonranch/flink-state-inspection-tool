@@ -31,22 +31,23 @@ public final class OperatorEndpoint {
             LOG.info("Discover operators: path={}", path);
 
             Map<String, String> config = DiscoveryEndpoint.extractConfig(body);
-            StorageConnector connector = StorageConnectorFactory.create(path, config);
-            String localPath = connector.resolveFullCheckpoint(path);
-            CheckpointCache.getInstance().register(path, localPath);
-            List<DiscoveredOperator> operators = MetadataReader.readOperatorsFromPath(
-                localPath);
+            try (StorageConnector connector = StorageConnectorFactory.create(path, config)) {
+                String localPath = connector.resolveFullCheckpoint(path);
+                CheckpointCache.getInstance().register(path, localPath);
+                List<DiscoveredOperator> operators = MetadataReader.readOperatorsFromPath(
+                    localPath);
 
-            int sstCount = countSstFiles(new java.io.File(localPath));
-            for (DiscoveredOperator op : operators) {
-                if (!op.getKeyedStates().isEmpty()) {
-                    op.setKeyedStateEntryCount(sstCount);
+                int sstCount = countSstFiles(new java.io.File(localPath));
+                for (DiscoveredOperator op : operators) {
+                    if (!op.getKeyedStates().isEmpty()) {
+                        op.setKeyedStateEntryCount(sstCount);
+                    }
                 }
-            }
 
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("operators", operators);
-            ctx.json(ApiResponse.success(data));
+                Map<String, Object> data = new LinkedHashMap<>();
+                data.put("operators", operators);
+                ctx.json(ApiResponse.success(data));
+            }
         });
     }
 
