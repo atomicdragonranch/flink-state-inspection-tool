@@ -181,7 +181,7 @@ cd ui && npm run dev     # start UI dev server (for development)
 mvn test
 ```
 
-103 unit tests covering metadata parsing, operator discovery, state deserialization (keyed + operator), storage connectors, CLI options, API endpoints, diff logic, and path validation.
+210 unit tests covering metadata parsing, operator discovery, state deserialization (keyed + operator + reducing + aggregating), storage connectors (local, Docker, S3, GCS), CLI options, API endpoints, diff logic, pagination, output formatting, path validation, and deserialization security.
 
 ### Integration Tests
 
@@ -241,11 +241,11 @@ Under active development. See the [issue tracker](https://github.com/atomicdrago
 - Raw bytes fallback for undeserializable state values
 - Operator state reading (broadcast, union, split-distribute)
 - Keyed and operator state diff comparison
-
-**Planned:**
-- GCS connector (#4)
-- FRocksDB-format SST file support
-- ReducingState and AggregatingState support (#17)
+- GCS storage connector
+- FRocksDB-format SST file detection with graceful fallback (build with `-Pfrocksdb` for full support)
+- ReducingState and AggregatingState support
+- CLI output formatters (JSON, table, file export)
+- Pagination (offset/limit) for all inspect and diff endpoints
 
 ## License
 
