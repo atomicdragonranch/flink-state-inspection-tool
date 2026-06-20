@@ -23,6 +23,7 @@ import org.apache.flink.runtime.state.filesystem.RelativeFileStateHandle;
 import org.apache.flink.runtime.state.metainfo.StateMetaInfoSnapshot;
 import org.rocksdb.Options;
 import org.rocksdb.ReadOptions;
+import org.rocksdb.RocksDBException;
 import org.rocksdb.SstFileReader;
 import org.rocksdb.SstFileReaderIterator;
 import org.slf4j.Logger;
@@ -123,6 +124,8 @@ public final class GenericStateReader {
             Map<String, Map<String, Object>> keyEntries = new LinkedHashMap<>();
             int maxKeys = limit * 10;
             boolean truncated = false;
+            int skippedFrocksdbFiles = 0;
+            List<String> warnings = new ArrayList<>();
 
             try {
                 for (String sstFile : sstFiles) {
@@ -221,6 +224,17 @@ public final class GenericStateReader {
                                 iter.next();
                             }
                         }
+                    } catch (RocksDBException e) {
+                        if (isFrocksdbFormatError(e)) {
+                            skippedFrocksdbFiles++;
+                            LOG.warn("SST file appears to be in FRocksDB format (used by most "
+                                + "production Flink deployments). This inspector was built with "
+                                + "standard RocksDB. To read FRocksDB-format files, rebuild with "
+                                + "frocksdbjni instead of rocksdbjni in pom.xml. "
+                                + "Skipping file: {}", sstFile);
+                        } else {
+                            LOG.warn("Failed to read SST file {}: {}", sstFile, e.getMessage());
+                        }
                     } catch (Exception e) {
                         LOG.warn("Failed to read SST file {}: {}", sstFile, e.getMessage());
                     }
@@ -233,6 +247,15 @@ public final class GenericStateReader {
                         LOG.debug("Failed to delete temp SST file: {}", tempFile, e);
                     }
                 }
+            }
+
+            if (skippedFrocksdbFiles > 0) {
+                String msg = String.format(
+                    "%d SST file(s) skipped: FRocksDB format not readable by standard "
+                    + "RocksDB. Rebuild with 'mvn package -Pfrocksdb' for FRocksDB support.",
+                    skippedFrocksdbFiles);
+                warnings.add(msg);
+                LOG.warn(msg);
             }
 
             if (truncated) {
@@ -260,7 +283,8 @@ public final class GenericStateReader {
                 }
             }
 
-            return new StateReadResult(operatorUidOrHash, results, columns);
+            return new StateReadResult(operatorUidOrHash, results, columns,
+                skippedFrocksdbFiles, warnings);
         } finally {
             Thread.currentThread().setContextClassLoader(originalCl);
         }
@@ -272,6 +296,8 @@ public final class GenericStateReader {
             DataInputDeserializer valueInput = new DataInputDeserializer(rawValue);
             switch (sde.stateType) {
                 case "VALUE":
+                case "REDUCING":
+                case "AGGREGATING":
                     return sde.valueSerializer.deserialize(valueInput);
                 case "LIST": {
                     TypeSerializer elemSer = sde.listElementSerializer != null
@@ -322,6 +348,16 @@ public final class GenericStateReader {
         }
         if (bytes.length > maxBytes) sb.append("...");
         return sb.toString();
+    }
+
+    static boolean isFrocksdbFormatError(RocksDBException e) {
+        String msg = e.getMessage();
+        if (msg == null) return false;
+        String lower = msg.toLowerCase();
+        return lower.contains("magic number")
+            || lower.contains("bad table magic number")
+            || lower.contains("not an sstable")
+            || (lower.contains("corruption") && lower.contains("sst"));
     }
 
     private static List<String> resolveSstFiles(

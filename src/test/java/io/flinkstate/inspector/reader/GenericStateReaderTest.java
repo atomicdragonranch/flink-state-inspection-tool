@@ -7,6 +7,7 @@ import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.api.common.typeutils.base.MapSerializer;
 import org.apache.flink.core.memory.DataOutputSerializer;
 import org.junit.jupiter.api.Test;
+import org.rocksdb.RocksDBException;
 
 import java.util.Base64;
 import java.util.List;
@@ -127,7 +128,7 @@ class GenericStateReaderTest {
         // Arrange
         byte[] data = {0x0A, 0x0B};
         GenericStateReader.StateDescriptorEntry sde =
-            new GenericStateReader.StateDescriptorEntry("x", "REDUCING", StringSerializer.INSTANCE, null, null, null);
+            new GenericStateReader.StateDescriptorEntry("x", "FOLDING", StringSerializer.INSTANCE, null, null, null);
 
         // Act
         Object result = GenericStateReader.deserializeValue(sde, data);
@@ -136,7 +137,59 @@ class GenericStateReaderTest {
         assertThat(result).isInstanceOf(Map.class);
         Map<String, Object> raw = (Map<String, Object>) result;
         assertThat(raw.get("_raw")).isEqualTo(true);
-        assertThat(raw.get("_reason")).isEqualTo("REDUCING");
+        assertThat(raw.get("_reason")).isEqualTo("FOLDING");
+    }
+
+    @Test
+    void deserializeValueHandlesReducingState() throws Exception {
+        // Arrange
+        byte[] serialized = serializeValue(LongSerializer.INSTANCE, 99L);
+        GenericStateReader.StateDescriptorEntry sde = reducingEntry("runningTotal", LongSerializer.INSTANCE);
+
+        // Act
+        Object result = GenericStateReader.deserializeValue(sde, serialized);
+
+        // Assert
+        assertThat(result).isEqualTo(99L);
+    }
+
+    @Test
+    void deserializeValueHandlesReducingStateString() throws Exception {
+        // Arrange
+        byte[] serialized = serializeValue(StringSerializer.INSTANCE, "reduced-value");
+        GenericStateReader.StateDescriptorEntry sde = reducingEntry("concat", StringSerializer.INSTANCE);
+
+        // Act
+        Object result = GenericStateReader.deserializeValue(sde, serialized);
+
+        // Assert
+        assertThat(result).isEqualTo("reduced-value");
+    }
+
+    @Test
+    void deserializeValueHandlesAggregatingState() throws Exception {
+        // Arrange
+        byte[] serialized = serializeValue(DoubleSerializer.INSTANCE, 42.5);
+        GenericStateReader.StateDescriptorEntry sde = aggregatingEntry("average", DoubleSerializer.INSTANCE);
+
+        // Act
+        Object result = GenericStateReader.deserializeValue(sde, serialized);
+
+        // Assert
+        assertThat(result).isEqualTo(42.5);
+    }
+
+    @Test
+    void deserializeValueHandlesAggregatingStateLong() throws Exception {
+        // Arrange
+        byte[] serialized = serializeValue(LongSerializer.INSTANCE, 1000L);
+        GenericStateReader.StateDescriptorEntry sde = aggregatingEntry("sum", LongSerializer.INSTANCE);
+
+        // Act
+        Object result = GenericStateReader.deserializeValue(sde, serialized);
+
+        // Assert
+        assertThat(result).isEqualTo(1000L);
     }
 
     // --- rawBytesMap tests ---
@@ -208,6 +261,71 @@ class GenericStateReaderTest {
         assertThat(hex).isEmpty();
     }
 
+    // --- isFrocksdbFormatError tests ---
+
+    @Test
+    void isFrocksdbFormatErrorDetectsMagicNumber() {
+        // Arrange
+        RocksDBException ex = new RocksDBException(
+            "Corruption: Bad table magic number: expected 9863518390377041911, got 4994500903858853830 in /tmp/sst/000042.sst");
+
+        // Act
+        boolean result = GenericStateReader.isFrocksdbFormatError(ex);
+
+        // Assert
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    void isFrocksdbFormatErrorDetectsNotAnSstable() {
+        // Arrange
+        RocksDBException ex = new RocksDBException(
+            "Corruption: not an sstable (bad magic number)");
+
+        // Act
+        boolean result = GenericStateReader.isFrocksdbFormatError(ex);
+
+        // Assert
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    void isFrocksdbFormatErrorDetectsSstCorruption() {
+        // Arrange
+        RocksDBException ex = new RocksDBException(
+            "Corruption in SST file data");
+
+        // Act
+        boolean result = GenericStateReader.isFrocksdbFormatError(ex);
+
+        // Assert
+        assertThat(result).isTrue();
+    }
+
+    @Test
+    void isFrocksdbFormatErrorReturnsFalseForUnrelatedError() {
+        // Arrange
+        RocksDBException ex = new RocksDBException("File not found: /tmp/missing.sst");
+
+        // Act
+        boolean result = GenericStateReader.isFrocksdbFormatError(ex);
+
+        // Assert
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    void isFrocksdbFormatErrorHandlesNullMessage() {
+        // Arrange
+        RocksDBException ex = new RocksDBException((String) null);
+
+        // Act
+        boolean result = GenericStateReader.isFrocksdbFormatError(ex);
+
+        // Assert
+        assertThat(result).isFalse();
+    }
+
     // --- helpers ---
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -237,5 +355,17 @@ class GenericStateReaderTest {
             org.apache.flink.api.common.typeutils.TypeSerializer valueSerializer,
             org.apache.flink.api.common.typeutils.TypeSerializer mapKeySerializer) {
         return new GenericStateReader.StateDescriptorEntry(name, "MAP", valueSerializer, mapKeySerializer, null, null);
+    }
+
+    @SuppressWarnings("rawtypes")
+    private static GenericStateReader.StateDescriptorEntry reducingEntry(
+            String name, org.apache.flink.api.common.typeutils.TypeSerializer serializer) {
+        return new GenericStateReader.StateDescriptorEntry(name, "REDUCING", serializer, null, null, null);
+    }
+
+    @SuppressWarnings("rawtypes")
+    private static GenericStateReader.StateDescriptorEntry aggregatingEntry(
+            String name, org.apache.flink.api.common.typeutils.TypeSerializer serializer) {
+        return new GenericStateReader.StateDescriptorEntry(name, "AGGREGATING", serializer, null, null, null);
     }
 }
