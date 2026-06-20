@@ -15,7 +15,7 @@ Compatible with savepoints from Flink 1.x and 2.x (the State Processor API maint
 - **Source detection**: automatically finds running Flink Docker containers and their checkpoint paths
 - **Direct SST reading**: reads RocksDB SST files directly using `SstFileReader`, bypassing the State Processor API's `SavepointReader` and its requirement for a MiniCluster
 - **Generic deserialization**: handles built-in Flink types (String, Long, Double, Integer, POJO, Avro, Protobuf) without domain-specific code. Uses a `LenientClassLoader` that generates stub bytecode for missing application classes, so checkpoint metadata loads without the original job's dependencies
-- **Pluggable storage**: abstract `StorageConnector` class with support for local filesystem, S3, and Docker containers (GCS planned)
+- **Pluggable storage**: abstract `StorageConnector` class with support for local filesystem, S3, GCS, and Docker containers
 - **State diff**: select two checkpoints and compare state side-by-side to see what changed
 - **CLI**: full command-line interface for scripting and automation
 
@@ -198,9 +198,14 @@ Built-in Flink types (String, Long, Integer, Maps, Lists) work without additiona
 Requires JDK 17+ (tested with JDK 22) and Node.js 18+ (for the web UI).
 
 ```bash
-mvn package              # compile + build fat JAR
-cd ui && npm run build   # build web UI (for production)
-cd ui && npm run dev     # start UI dev server (for development)
+cd ui && npm install && npm run build   # build web UI into src/main/resources/public/
+cd .. && mvn package -DskipTests        # compile + build fat JAR (includes UI)
+```
+
+For UI development, run the Vite dev server with hot reload:
+
+```bash
+cd ui && npm run dev     # start UI dev server on port 5173
 ```
 
 ## Testing
@@ -256,26 +261,13 @@ This avoids the MiniCluster entirely, works without application classes on the c
 
 ## Project Status
 
-Under active development. See the [issue tracker](https://github.com/atomicdragonranch/flink-state-inspection-tool/issues) for the roadmap.
+Feature-complete for single-job checkpoint inspection. See the [issue tracker](https://github.com/atomicdragonranch/flink-state-inspection-tool/issues) for planned improvements.
 
-**Implemented:**
-- Storage connector abstraction with Local, Docker, and S3 connectors
-- CLI framework with all commands
-- Checkpoint and savepoint discovery and listing
-- Operator auto-discovery from checkpoint metadata
-- Generic keyed state reader with direct SST file access
-- Docker container auto-detection
-- S3 storage with AWS SDK v2 (also works with LocalStack and MinIO)
-- Web UI with browse, inspect, diff, and cache management views
-- Checkpoint cache for re-inspection and diffing
-- Raw bytes fallback for undeserializable state values
-- Operator state reading (broadcast, union, split-distribute)
-- Keyed and operator state diff comparison
-- GCS storage connector
-- FRocksDB-format SST file detection with graceful fallback (build with `-Pfrocksdb` for full support)
-- ReducingState and AggregatingState support
-- CLI output formatters (JSON, table, file export)
-- Pagination (offset/limit) for all inspect and diff endpoints
+**Supported state types:** ValueState, ListState, MapState, ReducingState, AggregatingState, operator state (broadcast, union, split-distribute)
+
+**Storage backends:** Local filesystem, Docker containers, AWS S3 (with LocalStack/MinIO support), Google Cloud Storage
+
+**FRocksDB:** SST files written by Flink's bundled FRocksDB are detected automatically. Build with `mvn package -Pfrocksdb` to read them natively instead of falling back to raw bytes.
 
 ## License
 
