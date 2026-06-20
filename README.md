@@ -23,13 +23,43 @@ Compatible with savepoints from Flink 1.x and 2.x (the State Processor API maint
 
 ### Screenshots
 
-| Browse | Inspect | Diff |
-|--------|---------|------|
-| ![Browse snapshots](docs/images/browse-snapshots.png) | ![Inspect state](docs/images/inspect-state.png) | ![Diff summary](docs/images/diff-summary.png) |
-| Checkpoint discovery and listing | Keyed state entries with expandable JSON | Side-by-side state comparison |
+**Source selection and snapshot discovery**
+
+![Source selector](docs/images/browse-source-selector.png)
+
+Pick a storage backend (Local, Docker, S3, GCS) and enter a path. Docker containers with Flink checkpoints are auto-detected.
+
+![Browse snapshots](docs/images/browse-snapshots.png)
+
+**State inspection**
+
+![Inspect state](docs/images/inspect-state.png)
+
+Select an operator to browse keyed state entries. Expandable rows show full JSON values with syntax highlighting.
+
+![Inspect detail](docs/images/inspect-detail.png)
+
+Operator state (broadcast, union, split-distribute) is also supported:
+
+![Operator state](docs/images/inspect-operator-state.png)
+
+**Checkpoint diff**
+
+![Diff summary](docs/images/diff-summary.png)
+
+Compare two checkpoints to see added, removed, and modified keys at a glance.
+
+![Modified keys](docs/images/diff-modified-keys.png)
+
+Drill into a key to see field-level changes side-by-side:
 
 ![Side-by-side diff](docs/images/diff-side-by-side.png)
-*Field-level comparison between two checkpoints*
+
+**Cache management**
+
+![Cache page](docs/images/cache-page.png)
+
+Downloaded checkpoint data is cached locally for fast re-inspection and diffing.
 
 The primary interface is a React web dashboard served by the built-in Javalin server:
 
