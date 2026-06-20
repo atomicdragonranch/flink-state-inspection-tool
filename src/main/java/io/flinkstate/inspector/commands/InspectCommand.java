@@ -1,6 +1,12 @@
 package io.flinkstate.inspector.commands;
 
+import io.flinkstate.inspector.util.OutputHandler;
 import picocli.CommandLine;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 @CommandLine.Command(
     name = "inspect",
@@ -38,6 +44,22 @@ public class InspectCommand implements Runnable {
     @Override
     public void run() {
         // TODO: implement with OperatorDiscovery + GenericKeyedStateReader
-        System.out.println("Inspect command not yet implemented. Path: " + path);
+        // When implemented, the results will be formatted through OutputHandler.
+        // For now, output a placeholder message through the formatting pipeline.
+
+        List<String> headers = List.of("OPERATOR", "STATE", "KEY", "VALUE");
+        List<List<String>> rows = Collections.emptyList();
+        String footer = "Inspect command not yet implemented. Path: " + path;
+
+        Object jsonData = null;
+        if (json) {
+            Map<String, Object> placeholder = new LinkedHashMap<>();
+            placeholder.put("status", "not_implemented");
+            placeholder.put("path", path);
+            placeholder.put("entries", Collections.emptyList());
+            jsonData = placeholder;
+        }
+
+        OutputHandler.write(jsonData, headers, rows, footer, json, outputFile);
     }
 }

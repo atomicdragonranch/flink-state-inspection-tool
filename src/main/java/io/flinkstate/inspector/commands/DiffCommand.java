@@ -1,6 +1,12 @@
 package io.flinkstate.inspector.commands;
 
+import io.flinkstate.inspector.util.OutputHandler;
 import picocli.CommandLine;
+
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 @CommandLine.Command(
     name = "diff",
@@ -35,8 +41,25 @@ public class DiffCommand implements Runnable {
     @Override
     public void run() {
         // TODO: implement with DiffExecutor + GenericKeyedStateReader
-        System.out.println("Diff command not yet implemented.");
-        System.out.println("  Path 1: " + path1);
-        System.out.println("  Path 2: " + path2);
+        // When implemented, the results will be formatted through OutputHandler.
+        // For now, output a placeholder message through the formatting pipeline.
+
+        List<String> headers = List.of("STATUS", "OPERATOR", "STATE", "KEY", "LEFT VALUE", "RIGHT VALUE");
+        List<List<String>> rows = Collections.emptyList();
+        String footer = "Diff command not yet implemented." + System.lineSeparator()
+                + "  Path 1: " + path1 + System.lineSeparator()
+                + "  Path 2: " + path2;
+
+        Object jsonData = null;
+        if (json) {
+            Map<String, Object> placeholder = new LinkedHashMap<>();
+            placeholder.put("status", "not_implemented");
+            placeholder.put("path1", path1);
+            placeholder.put("path2", path2);
+            placeholder.put("diffs", Collections.emptyList());
+            jsonData = placeholder;
+        }
+
+        OutputHandler.write(jsonData, headers, rows, footer, json, outputFile);
     }
 }

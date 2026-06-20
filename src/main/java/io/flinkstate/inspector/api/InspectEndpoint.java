@@ -66,6 +66,12 @@ public final class InspectEndpoint {
                 data.put("keysOnly", keysOnly);
                 data.put("columns", result.getColumns());
                 data.put("entries", paged);
+                if (result.getSkippedSstFiles() > 0) {
+                    data.put("skippedSstFiles", result.getSkippedSstFiles());
+                }
+                if (!result.getWarnings().isEmpty()) {
+                    data.put("warnings", result.getWarnings());
+                }
                 ctx.json(ApiResponse.success(data));
             }
         });
