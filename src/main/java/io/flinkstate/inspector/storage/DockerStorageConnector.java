@@ -21,6 +21,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Storage connector that reads checkpoint data from inside Docker containers.
@@ -36,6 +37,8 @@ import java.util.UUID;
 public class DockerStorageConnector extends StorageConnector {
 
     private static final Logger LOG = LoggerFactory.getLogger(DockerStorageConnector.class);
+    private static final Pattern VALID_CONTAINER_NAME = Pattern.compile("^[a-zA-Z0-9][a-zA-Z0-9_.-]+$");
+    private static final Pattern DANGEROUS_PATH_CHARS = Pattern.compile("[;|&$`'\"\\\\(){}]");
 
     private Path tempDir;
 
@@ -83,8 +86,8 @@ public class DockerStorageConnector extends StorageConnector {
     public boolean validateCheckpoint(String checkpointPath) {
         String[] parsed = parseDockerUri(checkpointPath);
         List<String> result = execInContainer(
-            parsed[0], "sh", "-c", "test -f '" + parsed[1] + "/_metadata' && echo ok");
-        return result.stream().anyMatch(line -> line.contains("ok"));
+            parsed[0], "ls", parsed[1] + "/_metadata");
+        return result.stream().anyMatch(line -> line.contains("_metadata"));
     }
 
     @Override
@@ -127,8 +130,8 @@ public class DockerStorageConnector extends StorageConnector {
         String parentPath = containerPath.substring(0, containerPath.lastIndexOf('/'));
         String sharedPath = parentPath + "/shared";
         List<String> sharedCheck = execInContainer(
-            container, "sh", "-c", "test -d '" + sharedPath + "' && echo ok");
-        if (sharedCheck.stream().anyMatch(l -> l.contains("ok"))) {
+            container, "ls", sharedPath);
+        if (!sharedCheck.isEmpty()) {
             Path localShared = localDir.resolve("shared");
             Files.createDirectories(localShared);
             dockerCp(container, sharedPath + "/.", localShared.toString());
@@ -180,10 +183,42 @@ public class DockerStorageConnector extends StorageConnector {
     static String[] parseDockerUri(String uri) {
         String stripped = uri.replaceFirst("^docker://", "");
         int slash = stripped.indexOf('/');
+        String container;
+        String path;
         if (slash < 0) {
-            return new String[]{stripped, "/"};
+            container = stripped;
+            path = "/";
+        } else {
+            container = stripped.substring(0, slash);
+            path = stripped.substring(slash);
         }
-        return new String[]{stripped.substring(0, slash), stripped.substring(slash)};
+        validateContainerName(container);
+        validateContainerPath(path);
+        return new String[]{container, path};
+    }
+
+    static void validateContainerName(String name) {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException("Docker container name is required");
+        }
+        if (!VALID_CONTAINER_NAME.matcher(name).matches()) {
+            throw new IllegalArgumentException(
+                "Invalid Docker container name: must match [a-zA-Z0-9][a-zA-Z0-9_.-]+");
+        }
+    }
+
+    static void validateContainerPath(String path) {
+        if (path == null || path.isEmpty()) {
+            throw new IllegalArgumentException("Container path is required");
+        }
+        if (DANGEROUS_PATH_CHARS.matcher(path).find()) {
+            throw new IllegalArgumentException(
+                "Container path contains disallowed characters");
+        }
+        if (path.contains("..")) {
+            throw new IllegalArgumentException(
+                "Container path must not contain '..' segments");
+        }
     }
 
     private List<String> execInContainer(String container, String... command) {

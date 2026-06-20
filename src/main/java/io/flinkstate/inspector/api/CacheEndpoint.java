@@ -19,11 +19,11 @@ public final class CacheEndpoint {
 
         app.post("/api/cache/delete", ctx -> {
             JsonNode body = MAPPER.readTree(ctx.body());
-            JsonNode pathNode = body.get("localPath");
-            if (pathNode == null || pathNode.asText().isEmpty()) {
-                throw new IllegalArgumentException("Missing required field: localPath");
+            JsonNode idNode = body.get("id");
+            if (idNode == null || idNode.asText().isEmpty()) {
+                throw new IllegalArgumentException("Missing required field: id");
             }
-            boolean deleted = CheckpointCache.getInstance().delete(pathNode.asText());
+            boolean deleted = CheckpointCache.getInstance().delete(idNode.asText());
             ctx.json(ApiResponse.success(deleted));
         });
     }

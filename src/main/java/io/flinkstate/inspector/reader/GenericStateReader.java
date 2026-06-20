@@ -118,6 +118,8 @@ public final class GenericStateReader {
             List<String> sstFiles = resolveSstFiles(opInfo.stateHandle, localCheckpointPath);
 
             Map<String, Map<String, Object>> keyEntries = new LinkedHashMap<>();
+            int maxKeys = limit * 10;
+            boolean truncated = false;
 
             for (String sstFile : sstFiles) {
                 try (Options opts = new Options();
@@ -161,6 +163,13 @@ public final class GenericStateReader {
 
                             if (keyFilter != null && !keyFilter.isEmpty()
                                     && !keyStr.contains(keyFilter)) {
+                                iter.next();
+                                continue;
+                            }
+
+                            if (!keyEntries.containsKey(keyStr)
+                                    && keyEntries.size() >= maxKeys) {
+                                truncated = true;
                                 iter.next();
                                 continue;
                             }
@@ -211,6 +220,11 @@ public final class GenericStateReader {
                 } catch (Exception e) {
                     LOG.warn("Failed to read SST file {}: {}", sstFile, e.getMessage());
                 }
+            }
+
+            if (truncated) {
+                LOG.warn("Keyed state scan capped at {} unique keys (limit={}); "
+                    + "results may be incomplete", maxKeys, limit);
             }
 
             List<Map<String, Object>> results = new ArrayList<>();

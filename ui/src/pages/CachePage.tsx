@@ -46,16 +46,16 @@ export default function CachePage() {
   });
 
   const handleDelete = useCallback(
-    (localPath: string) => {
-      deleteMutation.mutate(localPath);
-      if (diffSelection?.localPath === localPath) setDiffSelection(null);
+    (id: string) => {
+      deleteMutation.mutate(id);
+      if (diffSelection?.id === id) setDiffSelection(null);
     },
     [deleteMutation, diffSelection]
   );
 
   const handleInspect = useCallback(
     (entry: CacheEntry) => {
-      navigate(`/inspect?path=${encodeURIComponent(entry.localPath)}`);
+      navigate(`/inspect?path=${encodeURIComponent(entry.sourcePath)}`);
     },
     [navigate]
   );
@@ -66,7 +66,7 @@ export default function CachePage() {
         setDiffSelection(entry);
       } else {
         navigate(
-          `/diff?path1=${encodeURIComponent(diffSelection.localPath)}&path2=${encodeURIComponent(entry.localPath)}`
+          `/diff?path1=${encodeURIComponent(diffSelection.sourcePath)}&path2=${encodeURIComponent(entry.sourcePath)}`
         );
         setDiffSelection(null);
       }
@@ -144,10 +144,10 @@ export default function CachePage() {
             <TableBody>
               {entries.map(entry => {
                 const isSelected =
-                  diffSelection?.localPath === entry.localPath;
+                  diffSelection?.id === entry.id;
                 return (
                   <TableRow
-                    key={entry.localPath}
+                    key={entry.id}
                     hover
                     sx={
                       isSelected
@@ -210,7 +210,7 @@ export default function CachePage() {
                           size="small"
                           color="error"
                           variant="outlined"
-                          onClick={() => handleDelete(entry.localPath)}
+                          onClick={() => handleDelete(entry.id)}
                           disabled={deleteMutation.isPending}
                         >
                           Delete

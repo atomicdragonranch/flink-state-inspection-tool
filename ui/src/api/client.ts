@@ -53,7 +53,6 @@ export interface OperatorInfo {
 
 export interface OperatorDiscovery {
   operators: OperatorInfo[];
-  localPath?: string;
 }
 
 export type SnapshotType = "checkpoint" | "savepoint";
@@ -125,8 +124,8 @@ export async function detectSources(): Promise<DetectedSource[]> {
 // --- Cache ---
 
 export interface CacheEntry {
+  id: string;
   sourcePath: string;
-  localPath: string;
   cachedAt: number;
   sizeBytes: number;
 }
@@ -136,10 +135,10 @@ export async function listCache(): Promise<CacheEntry[]> {
   return res.data;
 }
 
-export async function deleteCache(localPath: string): Promise<void> {
+export async function deleteCache(id: string): Promise<void> {
   await fetchApi<boolean>("/api/cache/delete", {
     method: "POST",
-    body: JSON.stringify({ localPath })
+    body: JSON.stringify({ id })
   });
 }
 

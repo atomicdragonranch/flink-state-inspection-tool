@@ -53,7 +53,6 @@ export default function InspectPage() {
   const [selectedStateName, setSelectedStateName] = useState("");
   const [keyFilter, setKeyFilter] = useState("");
   const [keysOnly, setKeysOnly] = useState(false);
-  const [resolvedLocalPath, setResolvedLocalPath] = useState<string | null>(null);
 
   const setPath = useCallback(
     (newPath: string) => {
@@ -78,7 +77,6 @@ export default function InspectPage() {
         discoverMutation.mutate(paramPath, {
           onSuccess: data => {
             setDiscoveredOperators(data.operators);
-            if (data.localPath) setResolvedLocalPath(data.localPath);
           }
         });
       }
@@ -92,7 +90,6 @@ export default function InspectPage() {
     discoverMutation.mutate(path, {
       onSuccess: data => {
         setDiscoveredOperators(data.operators);
-        if (data.localPath) setResolvedLocalPath(data.localPath);
       }
     });
   }, [path, discoverMutation, setDiscoveredOperators]);
@@ -127,7 +124,7 @@ export default function InspectPage() {
 
   const handleInspect = () => {
     if (!path || !selectedOperator) return;
-    const inspectPath = resolvedLocalPath || path;
+    const inspectPath = path;
 
     if (inspectType === "keyed") {
       inspectKeyedMutation.mutate({

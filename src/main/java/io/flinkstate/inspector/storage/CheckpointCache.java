@@ -11,6 +11,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -28,10 +29,12 @@ public final class CheckpointCache {
         return INSTANCE;
     }
 
-    public void register(String sourcePath, String localPath) {
+    public String register(String sourcePath, String localPath) {
+        String id = UUID.randomUUID().toString().substring(0, 8);
         long size = computeDirectorySize(new File(localPath));
-        entries.put(localPath, new CacheEntry(sourcePath, localPath, System.currentTimeMillis(), size));
-        LOG.info("Cached checkpoint: {} -> {} ({} bytes)", sourcePath, localPath, size);
+        entries.put(id, new CacheEntry(id, sourcePath, localPath, System.currentTimeMillis(), size));
+        LOG.info("Cached checkpoint [{}]: {} -> {} ({} bytes)", id, sourcePath, localPath, size);
+        return id;
     }
 
     public String lookupLocalPath(String sourcePath) {
@@ -47,24 +50,24 @@ public final class CheckpointCache {
     public List<Map<String, Object>> listEntries() {
         return entries.values().stream()
             .sorted(Comparator.comparingLong(CacheEntry::cachedAt).reversed())
-            .map(CacheEntry::toMap)
+            .map(CacheEntry::toPublicMap)
             .collect(Collectors.toList());
     }
 
-    public boolean delete(String localPath) {
-        CacheEntry entry = entries.remove(localPath);
+    public boolean delete(String id) {
+        CacheEntry entry = entries.remove(id);
         if (entry == null) return false;
 
-        File dir = new File(localPath);
+        File dir = new File(entry.localPath());
         if (dir.exists()) {
             try {
                 Files.walk(dir.toPath())
                     .sorted(Comparator.reverseOrder())
                     .map(Path::toFile)
                     .forEach(File::delete);
-                LOG.info("Deleted cached checkpoint: {}", localPath);
+                LOG.info("Deleted cached checkpoint [{}]: {}", id, entry.sourcePath());
             } catch (IOException e) {
-                LOG.warn("Failed to delete cached checkpoint: {}", localPath, e);
+                LOG.warn("Failed to delete cached checkpoint [{}]: {}", id, entry.localPath(), e);
             }
         }
         return true;
@@ -72,6 +75,12 @@ public final class CheckpointCache {
 
     public int size() {
         return entries.size();
+    }
+
+    public void clear() {
+        for (String id : List.copyOf(entries.keySet())) {
+            delete(id);
+        }
     }
 
     private static long computeDirectorySize(File dir) {
@@ -86,11 +95,11 @@ public final class CheckpointCache {
         return total;
     }
 
-    record CacheEntry(String sourcePath, String localPath, long cachedAt, long sizeBytes) {
-        Map<String, Object> toMap() {
+    record CacheEntry(String id, String sourcePath, String localPath, long cachedAt, long sizeBytes) {
+        Map<String, Object> toPublicMap() {
             Map<String, Object> map = new LinkedHashMap<>();
+            map.put("id", id);
             map.put("sourcePath", sourcePath);
-            map.put("localPath", localPath);
             map.put("cachedAt", cachedAt);
             map.put("sizeBytes", sizeBytes);
             return map;

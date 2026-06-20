@@ -36,6 +36,7 @@ public class S3StorageConnector extends StorageConnector {
 
     private static final Logger LOG = LoggerFactory.getLogger(S3StorageConnector.class);
     private static final String DEFAULT_REGION = "us-east-1";
+    private static final int MAX_S3_OBJECTS = 10_000;
 
     private S3Client s3Client;
     private Path tempDir;
@@ -163,6 +164,11 @@ public class S3StorageConnector extends StorageConnector {
         Path localDir = createLocalDir("full-chk-");
 
         List<S3Object> objects = listAllObjects(bucket, prefix);
+        if (objects.size() > MAX_S3_OBJECTS) {
+            throw new IOException("Checkpoint contains " + objects.size()
+                + " objects, exceeding the safety limit of " + MAX_S3_OBJECTS
+                + ". Use a more specific path or increase the limit.");
+        }
         int count = 0;
         for (S3Object obj : objects) {
             String relativePath = obj.key().substring(prefix.length());

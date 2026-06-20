@@ -46,7 +46,6 @@ public final class OperatorEndpoint {
 
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("operators", operators);
-            data.put("localPath", localPath);
             ctx.json(ApiResponse.success(data));
         });
     }
