@@ -3,6 +3,7 @@ package io.flinkstate.inspector.api;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.flinkstate.inspector.reader.GenericStateReader;
+import io.flinkstate.inspector.reader.OperatorStateReader;
 import io.flinkstate.inspector.reader.StateReadResult;
 import io.flinkstate.inspector.storage.StorageConnector;
 import io.flinkstate.inspector.storage.StorageConnectorFactory;
@@ -70,16 +71,40 @@ public final class InspectEndpoint {
             String operatorUid = requireField(body, "operatorUid");
             String stateName = requireField(body, "stateName");
             String keyFilter = optionalField(body, "keyFilter");
+            int limit = intField(body, "limit", DEFAULT_LIMIT);
 
             LOG.info("Inspect operator state: path={}, operator={}, state={}",
                 path, operatorUid, stateName);
 
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("operatorUid", operatorUid);
-            data.put("stateName", stateName);
-            data.put("entryCount", 0);
-            data.put("entries", new Object[0]);
-            ctx.json(ApiResponse.success(data));
+            Map<String, String> connectorConfig = DiscoveryEndpoint.extractConfig(body);
+            try (StorageConnector connector = StorageConnectorFactory.create(path, connectorConfig)) {
+                String localPath = connector.resolveFullCheckpoint(path);
+                StateReadResult result = OperatorStateReader.readOperatorState(
+                    localPath, operatorUid, stateName, keyFilter, limit);
+
+                Map<String, Object> data = new LinkedHashMap<>();
+                data.put("operatorUid", result.getOperatorUid());
+                data.put("stateName", stateName);
+                data.put("entryCount", result.getEntryCount());
+                data.put("columns", result.getColumns());
+                data.put("entries", result.getEntries());
+                ctx.json(ApiResponse.success(data));
+            } catch (Exception e) {
+                LOG.error("Failed to read operator state", e);
+                String rootCause = e.getMessage();
+                Throwable cause = e.getCause();
+                while (cause != null) {
+                    rootCause = cause.getClass().getSimpleName() + ": " + cause.getMessage();
+                    cause = cause.getCause();
+                }
+                ctx.status(500);
+                Map<String, Object> err = new LinkedHashMap<>();
+                err.put("error", rootCause);
+                java.io.StringWriter sw = new java.io.StringWriter();
+                e.printStackTrace(new java.io.PrintWriter(sw));
+                err.put("stackTrace", sw.toString());
+                ctx.json(err);
+            }
         });
     }
 

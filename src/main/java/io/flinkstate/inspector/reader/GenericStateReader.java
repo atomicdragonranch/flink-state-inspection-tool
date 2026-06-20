@@ -313,7 +313,7 @@ public final class GenericStateReader {
             "No keyed state found for operator: " + operatorUidOrHash);
     }
 
-    private static InputStream openMetaHandle(
+    static InputStream openMetaHandle(
             StreamStateHandle handle, String localCheckpointPath) throws Exception {
         if (handle instanceof RelativeFileStateHandle) {
             String relativePath = ((RelativeFileStateHandle) handle).getRelativePath();
