@@ -103,6 +103,13 @@
             <version>${aws-sdk.version}</version>
         </dependency>
 
+        <!-- Google Cloud Storage -->
+        <dependency>
+            <groupId>com.google.cloud</groupId>
+            <artifactId>google-cloud-storage</artifactId>
+            <version>2.36.1</version>
+        </dependency>
+
         <!-- Logging -->
         <dependency>
             <groupId>ch.qos.logback</groupId>
@@ -208,6 +215,22 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>frocksdb</id>
+            <dependencies>
+                <dependency>
+                    <groupId>org.rocksdb</groupId>
+                    <artifactId>rocksdbjni</artifactId>
+                    <version>8.10.0</version>
+                    <scope>provided</scope>
+                </dependency>
+                <dependency>
+                    <groupId>com.ververica</groupId>
+                    <artifactId>frocksdbjni</artifactId>
+                    <version>6.20.3-ververica-2.0</version>
+                </dependency>
+            </dependencies>
+        </profile>
         <profile>
             <id>integration</id>
             <build>
