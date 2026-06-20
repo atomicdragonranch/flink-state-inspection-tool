@@ -49,6 +49,7 @@ const SOURCE_TYPE_CONFIG: Record<
 function inferSourceType(path: string): SourceType {
   if (path.startsWith("docker://")) return "docker";
   if (path.startsWith("s3://")) return "s3";
+  if (path.startsWith("s3a://")) return "s3";
   if (path.startsWith("gs://")) return "gcs";
   return "local";
 }

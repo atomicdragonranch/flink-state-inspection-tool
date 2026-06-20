@@ -29,7 +29,8 @@ public class FlinkStateInspector implements Runnable {
      * Allows only Flink and core Java classes during checkpoint metadata deserialization,
      * rejecting everything else to prevent deserialization gadget attacks.
      */
-    static final String DESERIALIZATION_FILTER_PATTERN = "org.apache.flink.**;java.**;!*";
+    static final String DESERIALIZATION_FILTER_PATTERN =
+        "org.apache.flink.**;java.**;[B;[I;[J;[D;[F;[S;[C;[Z;!*";
 
     public static void main(String[] args) {
         installDeserializationFilter();

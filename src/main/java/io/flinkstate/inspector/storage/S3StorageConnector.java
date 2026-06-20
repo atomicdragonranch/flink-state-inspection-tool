@@ -265,6 +265,7 @@ public class S3StorageConnector extends StorageConnector {
                 .lastModified()
                 .toEpochMilli();
         } catch (Exception e) {
+            LOG.debug("Could not retrieve modification time for s3://{}/{}: {}", bucket, metadataKey, e.getMessage());
             return 0L;
         }
     }
@@ -279,7 +280,7 @@ public class S3StorageConnector extends StorageConnector {
     public void close() {
         Path tempDir = tempDirRef.get();
         if (tempDir != null) {
-            LOG.info("Cleaning up temp directory: {}", tempDir);
+            LOG.debug("Cleaning up temp directory: {}", tempDir);
             try {
                 Files.walk(tempDir)
                     .sorted(Comparator.reverseOrder())
@@ -291,7 +292,11 @@ public class S3StorageConnector extends StorageConnector {
             }
         }
         if (s3Client != null) {
-            s3Client.close();
+            try {
+                s3Client.close();
+            } catch (Exception e) {
+                LOG.warn("Failed to close S3 client: {}", e.getMessage());
+            }
             LOG.info("S3 client closed");
         }
     }

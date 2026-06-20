@@ -11,6 +11,7 @@ import io.javalin.Javalin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +40,7 @@ public final class OperatorEndpoint {
                 List<DiscoveredOperator> operators = MetadataReader.readOperatorsFromPath(
                     localPath);
 
-                int sstCount = countSstFiles(new java.io.File(localPath));
+                int sstCount = countSstFiles(new File(localPath));
                 for (DiscoveredOperator op : operators) {
                     if (!op.getKeyedStates().isEmpty()) {
                         op.setKeyedStateEntryCount(sstCount);
@@ -53,12 +54,13 @@ public final class OperatorEndpoint {
         });
     }
 
-    private static int countSstFiles(java.io.File checkpointDir) {
+    private static int countSstFiles(File checkpointDir) {
         int count = 0;
-        java.io.File[] files = checkpointDir.listFiles();
+        File[] files = checkpointDir.listFiles();
         if (files == null) return 0;
-        for (java.io.File f : files) {
-            if (f.isFile() && (f.getName().endsWith(".sst") || !f.getName().contains("."))) {
+        for (File f : files) {
+            if (f.isFile() && (f.getName().endsWith(".sst") ||
+                (!f.getName().contains(".") && !f.getName().startsWith("_")))) {
                 count++;
             } else if (f.isDirectory()) {
                 count += countSstFiles(f);

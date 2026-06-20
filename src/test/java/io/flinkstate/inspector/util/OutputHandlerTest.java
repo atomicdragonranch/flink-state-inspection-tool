@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -50,7 +51,7 @@ class OutputHandlerTest {
     }
 
     @Test
-    void writeToFileCreatesFileWithContent(@TempDir Path tempDir) {
+    void writeToFileCreatesFileWithContent(@TempDir Path tempDir) throws IOException {
         // Arrange
         String content = "test output content";
         Path filePath = tempDir.resolve("output.txt");
@@ -64,7 +65,7 @@ class OutputHandlerTest {
     }
 
     @Test
-    void writeToFileCreatesParentDirectories(@TempDir Path tempDir) {
+    void writeToFileCreatesParentDirectories(@TempDir Path tempDir) throws IOException {
         // Arrange
         String content = "nested output";
         Path filePath = tempDir.resolve("sub").resolve("dir").resolve("output.txt");

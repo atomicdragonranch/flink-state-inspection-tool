@@ -2,9 +2,10 @@ package io.flinkstate.inspector.util;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,6 +16,8 @@ import java.util.List;
  * Supports JSON vs table formatting and stdout vs file output.
  */
 public final class OutputHandler {
+
+    private static final Logger LOG = LoggerFactory.getLogger(OutputHandler.class);
 
     private static final ObjectMapper PRETTY_MAPPER = new ObjectMapper()
             .enable(SerializationFeature.INDENT_OUTPUT);
@@ -49,7 +52,12 @@ public final class OutputHandler {
         }
 
         if (outputFile != null && !outputFile.isEmpty()) {
-            writeToFile(content, outputFile);
+            try {
+                writeToFile(content, outputFile);
+            } catch (IOException e) {
+                LOG.error("Failed to write output to file: {}", outputFile, e);
+                System.err.println("Failed to write output to file: " + e.getMessage());
+            }
         } else {
             System.out.print(content);
         }
@@ -65,7 +73,7 @@ public final class OutputHandler {
         try {
             return PRETTY_MAPPER.writeValueAsString(data);
         } catch (IOException e) {
-            throw new RuntimeException("Failed to serialize to JSON: " + e.getMessage(), e);
+            throw new RuntimeException("Failed to serialize to JSON", e);
         }
     }
 
@@ -74,17 +82,14 @@ public final class OutputHandler {
      *
      * @param content    the string content to write
      * @param filePath   the output file path
+     * @throws IOException if file creation or writing fails
      */
-    public static void writeToFile(String content, String filePath) {
-        try {
-            Path path = Path.of(filePath);
-            if (path.getParent() != null) {
-                Files.createDirectories(path.getParent());
-            }
-            Files.writeString(path, content, StandardCharsets.UTF_8);
-            System.out.println("Output written to: " + filePath);
-        } catch (IOException e) {
-            System.err.println("Failed to write output to file: " + e.getMessage());
+    public static void writeToFile(String content, String filePath) throws IOException {
+        Path path = Path.of(filePath);
+        if (path.getParent() != null) {
+            Files.createDirectories(path.getParent());
         }
+        Files.writeString(path, content, StandardCharsets.UTF_8);
+        System.err.println("Output written to: " + filePath);
     }
 }

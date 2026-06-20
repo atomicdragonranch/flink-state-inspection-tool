@@ -52,9 +52,9 @@ public final class DiffEndpoint {
             String local2 = resolveLocalPath(path2, config);
 
             StateReadResult result1 = GenericStateReader.readKeyedState(
-                local1, operatorUid, keyFilter, false, DEFAULT_LIMIT);
+                local1, operatorUid, keyFilter, false, limit + offset);
             StateReadResult result2 = GenericStateReader.readKeyedState(
-                local2, operatorUid, keyFilter, false, DEFAULT_LIMIT);
+                local2, operatorUid, keyFilter, false, limit + offset);
 
             Map<String, Object> data = computeDiff(
                 result1, result2, operatorUid, path1, path2, offset, limit);
@@ -79,9 +79,9 @@ public final class DiffEndpoint {
             String local2 = resolveLocalPath(path2, config);
 
             StateReadResult result1 = OperatorStateReader.readOperatorState(
-                local1, operatorUid, stateName, keyFilter, DEFAULT_LIMIT);
+                local1, operatorUid, stateName, keyFilter, limit + offset);
             StateReadResult result2 = OperatorStateReader.readOperatorState(
-                local2, operatorUid, stateName, keyFilter, DEFAULT_LIMIT);
+                local2, operatorUid, stateName, keyFilter, limit + offset);
 
             Map<String, Object> data = computeDiff(
                 result1, result2, operatorUid, path1, path2, offset, limit);
@@ -181,13 +181,7 @@ public final class DiffEndpoint {
 
     private static boolean entriesEqual(
             Map<String, Object> entry1, Map<String, Object> entry2) {
-        try {
-            String json1 = MAPPER.writeValueAsString(entry1);
-            String json2 = MAPPER.writeValueAsString(entry2);
-            return json1.equals(json2);
-        } catch (Exception e) {
-            return Objects.equals(entry1, entry2);
-        }
+        return Objects.equals(entry1, entry2);
     }
 
     private static List<Map<String, Object>> computeFieldChanges(
@@ -239,10 +233,10 @@ public final class DiffEndpoint {
     }
 
     private static String extractLabel(String path) {
-        if (path.contains("/")) {
-            return path.substring(path.lastIndexOf('/') + 1);
-        }
-        return path;
+        if (path == null) return "unknown";
+        String normalized = path.replace('\\', '/');
+        int idx = normalized.lastIndexOf('/');
+        return idx >= 0 ? normalized.substring(idx + 1) : normalized;
     }
 
 }

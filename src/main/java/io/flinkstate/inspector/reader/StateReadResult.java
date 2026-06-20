@@ -22,7 +22,7 @@ public final class StateReadResult {
                            List<String> columns, int skippedSstFiles,
                            List<String> warnings) {
         this.operatorUid = operatorUid;
-        this.entries = entries;
+        this.entries = Collections.unmodifiableList(new ArrayList<>(entries));
         this.columns = columns;
         this.skippedSstFiles = skippedSstFiles;
         this.warnings = warnings != null

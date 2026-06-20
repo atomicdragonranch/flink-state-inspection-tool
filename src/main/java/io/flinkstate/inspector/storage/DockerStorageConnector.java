@@ -256,6 +256,10 @@ public class DockerStorageConnector extends StorageConnector {
                 LOG.error("Docker exec timed out after {}s: {}", EXEC_TIMEOUT_SECONDS, fullCommand);
                 return Collections.emptyList();
             }
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                LOG.warn("Docker exec returned exit code {} for command: {}", exitCode, String.join(" ", fullCommand));
+            }
             return lines;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -266,7 +270,7 @@ public class DockerStorageConnector extends StorageConnector {
         }
     }
 
-    private void dockerCp(String container, String containerPath, String localPath) {
+    private void dockerCp(String container, String containerPath, String localPath) throws IOException {
         try {
             Process process = new ProcessBuilder("docker", "cp",
                 container + ":" + containerPath, localPath)
@@ -292,9 +296,7 @@ public class DockerStorageConnector extends StorageConnector {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Docker cp interrupted", e);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
+            throw new IOException("Docker cp interrupted", e);
         }
     }
 }

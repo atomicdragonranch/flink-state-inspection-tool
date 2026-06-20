@@ -4,18 +4,23 @@ import io.flinkstate.inspector.discovery.CheckpointEntry;
 import io.flinkstate.inspector.storage.StorageConnector;
 import io.flinkstate.inspector.storage.StorageConnectorFactory;
 import io.flinkstate.inspector.util.OutputHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 @CommandLine.Command(
     name = "list",
     description = "List checkpoints and savepoints at a storage path."
 )
 public class ListCommand implements Runnable {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ListCommand.class);
 
     @CommandLine.Parameters(index = "0", description = "Storage path (local, s3://, gs://, docker://container/path)")
     private String path;
@@ -48,9 +53,9 @@ public class ListCommand implements Runnable {
             for (CheckpointEntry entry : entries) {
                 rows.add(List.of(
                     String.valueOf(entry.getType()),
-                    nullSafe(entry.shortJobId()),
-                    nullSafe(entry.formattedTime()),
-                    nullSafe(entry.getPath())
+                    Objects.toString(entry.shortJobId(), ""),
+                    Objects.toString(entry.formattedTime(), ""),
+                    Objects.toString(entry.getPath(), "")
                 ));
             }
 
@@ -62,6 +67,9 @@ public class ListCommand implements Runnable {
             }
 
             OutputHandler.write(jsonData, headers, rows, footer, json, outputFile);
+        } catch (Exception e) {
+            LOG.error("Failed to list checkpoints at path: {}", path, e);
+            System.err.println("Error: " + e.getMessage());
         }
     }
 
@@ -80,7 +88,4 @@ public class ListCommand implements Runnable {
         return result;
     }
 
-    private static String nullSafe(String value) {
-        return value == null ? "" : value;
-    }
 }

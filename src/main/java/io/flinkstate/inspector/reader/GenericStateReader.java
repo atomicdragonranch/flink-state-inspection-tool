@@ -52,6 +52,11 @@ public final class GenericStateReader {
     private static final LenientClassLoader LENIENT_CL =
         new LenientClassLoader(GenericStateReader.class.getClassLoader());
 
+    // Scan extra keys to account for key-group distribution across SST files
+    private static final int KEY_SCAN_MULTIPLIER = 10;
+    private static final int HEX_DISPLAY_MAX_BYTES = 256;
+    private static final int BASE64_INCLUDE_MAX_BYTES = 1024;
+
     private GenericStateReader() {
     }
 
@@ -122,7 +127,7 @@ public final class GenericStateReader {
             List<String> sstFiles = resolveSstFiles(opInfo.stateHandle, localCheckpointPath, tempSstFiles);
 
             Map<String, Map<String, Object>> keyEntries = new LinkedHashMap<>();
-            int maxKeys = limit * 10;
+            int maxKeys = limit * KEY_SCAN_MULTIPLIER;
             boolean truncated = false;
             int skippedFrocksdbFiles = 0;
             List<String> warnings = new ArrayList<>();
@@ -255,7 +260,8 @@ public final class GenericStateReader {
                     + "RocksDB. Rebuild with 'mvn package -Pfrocksdb' for FRocksDB support.",
                     skippedFrocksdbFiles);
                 warnings.add(msg);
-                LOG.warn(msg);
+                LOG.warn("{} SST file(s) skipped: FRocksDB format not readable by standard RocksDB. "
+                    + "Rebuild with 'mvn package -Pfrocksdb' for FRocksDB support.", skippedFrocksdbFiles);
             }
 
             if (truncated) {
@@ -333,8 +339,8 @@ public final class GenericStateReader {
         result.put("_raw", true);
         result.put("_reason", reason);
         result.put("_bytes", rawValue.length);
-        result.put("_hex", bytesToHex(rawValue, 256));
-        if (rawValue.length <= 1024) {
+        result.put("_hex", bytesToHex(rawValue, HEX_DISPLAY_MAX_BYTES));
+        if (rawValue.length <= BASE64_INCLUDE_MAX_BYTES) {
             result.put("_base64", java.util.Base64.getEncoder().encodeToString(rawValue));
         }
         return result;
@@ -357,7 +363,7 @@ public final class GenericStateReader {
         return lower.contains("magic number")
             || lower.contains("bad table magic number")
             || lower.contains("not an sstable")
-            || (lower.contains("corruption") && lower.contains("sst"));
+            || (lower.contains("corruption") && lower.contains("sstable"));
     }
 
     private static List<String> resolveSstFiles(

@@ -18,6 +18,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static io.flinkstate.inspector.api.RequestParser.intField;
 import static io.flinkstate.inspector.api.RequestParser.requireField;
@@ -169,7 +170,12 @@ public final class DiscoveryEndpoint {
                 if (!trimmed.isEmpty()) names.add(trimmed);
             }
         }
-        process.waitFor();
+        boolean completed = process.waitFor(5, TimeUnit.SECONDS);
+        if (!completed) {
+            process.destroyForcibly();
+            LOG.warn("Docker command timed out");
+            return Collections.emptyList();
+        }
         return names;
     }
 
@@ -188,7 +194,13 @@ public final class DiscoveryEndpoint {
                 "docker", "exec", container, "test", "-d", path)
                 .redirectErrorStream(true)
                 .start();
-            return process.waitFor() == 0;
+            boolean completed = process.waitFor(5, TimeUnit.SECONDS);
+            if (!completed) {
+                process.destroyForcibly();
+                LOG.warn("Docker command timed out");
+                return false;
+            }
+            return process.exitValue() == 0;
         } catch (Exception e) {
             return false;
         }

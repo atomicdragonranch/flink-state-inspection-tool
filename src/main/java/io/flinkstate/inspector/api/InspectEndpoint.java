@@ -46,34 +46,39 @@ public final class InspectEndpoint {
 
             String cachedPath = CheckpointCache.getInstance().lookupLocalPath(path);
             Map<String, String> connectorConfig = DiscoveryEndpoint.extractConfig(body);
-            try (StorageConnector connector = StorageConnectorFactory.create(path, connectorConfig)) {
-                String localPath = cachedPath != null ? cachedPath
-                    : connector.resolveFullCheckpoint(path);
-                StateReadResult result = GenericStateReader.readKeyedState(
-                    localPath, operatorUid, keyFilter, keysOnly, limit + offset);
-
-                List<Map<String, Object>> allEntries = result.getEntries();
-                int totalCount = allEntries.size();
-                List<Map<String, Object>> paged = allEntries.subList(
-                    Math.min(offset, totalCount),
-                    Math.min(offset + limit, totalCount));
-
-                Map<String, Object> data = new LinkedHashMap<>();
-                data.put("operatorUid", result.getOperatorUid());
-                data.put("totalCount", totalCount);
-                data.put("offset", offset);
-                data.put("entryCount", paged.size());
-                data.put("keysOnly", keysOnly);
-                data.put("columns", result.getColumns());
-                data.put("entries", paged);
-                if (result.getSkippedSstFiles() > 0) {
-                    data.put("skippedSstFiles", result.getSkippedSstFiles());
+            String localPath;
+            if (cachedPath != null) {
+                localPath = cachedPath;
+            } else {
+                try (StorageConnector connector = StorageConnectorFactory.create(path, connectorConfig)) {
+                    localPath = connector.resolveFullCheckpoint(path);
+                    CheckpointCache.getInstance().register(path, localPath);
                 }
-                if (!result.getWarnings().isEmpty()) {
-                    data.put("warnings", result.getWarnings());
-                }
-                ctx.json(ApiResponse.success(data));
             }
+            StateReadResult result = GenericStateReader.readKeyedState(
+                localPath, operatorUid, keyFilter, keysOnly, limit + offset);
+
+            List<Map<String, Object>> allEntries = result.getEntries();
+            List<Map<String, Object>> paged = allEntries.subList(
+                Math.min(offset, allEntries.size()),
+                Math.min(offset + limit, allEntries.size()));
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("operatorUid", result.getOperatorUid());
+            data.put("returnedCount", allEntries.size());
+            data.put("hasMore", allEntries.size() >= limit + offset);
+            data.put("offset", offset);
+            data.put("entryCount", paged.size());
+            data.put("keysOnly", keysOnly);
+            data.put("columns", result.getColumns());
+            data.put("entries", paged);
+            if (result.getSkippedSstFiles() > 0) {
+                data.put("skippedSstFiles", result.getSkippedSstFiles());
+            }
+            if (!result.getWarnings().isEmpty()) {
+                data.put("warnings", result.getWarnings());
+            }
+            ctx.json(ApiResponse.success(data));
         });
 
         app.post("/api/inspect/broadcast", ctx -> {
@@ -90,28 +95,33 @@ public final class InspectEndpoint {
 
             String cachedPath = CheckpointCache.getInstance().lookupLocalPath(path);
             Map<String, String> connectorConfig = DiscoveryEndpoint.extractConfig(body);
-            try (StorageConnector connector = StorageConnectorFactory.create(path, connectorConfig)) {
-                String localPath = cachedPath != null ? cachedPath
-                    : connector.resolveFullCheckpoint(path);
-                StateReadResult result = OperatorStateReader.readOperatorState(
-                    localPath, operatorUid, stateName, keyFilter, limit + offset);
-
-                List<Map<String, Object>> allEntries = result.getEntries();
-                int totalCount = allEntries.size();
-                List<Map<String, Object>> paged = allEntries.subList(
-                    Math.min(offset, totalCount),
-                    Math.min(offset + limit, totalCount));
-
-                Map<String, Object> data = new LinkedHashMap<>();
-                data.put("operatorUid", result.getOperatorUid());
-                data.put("stateName", stateName);
-                data.put("totalCount", totalCount);
-                data.put("offset", offset);
-                data.put("entryCount", paged.size());
-                data.put("columns", result.getColumns());
-                data.put("entries", paged);
-                ctx.json(ApiResponse.success(data));
+            String localPath;
+            if (cachedPath != null) {
+                localPath = cachedPath;
+            } else {
+                try (StorageConnector connector = StorageConnectorFactory.create(path, connectorConfig)) {
+                    localPath = connector.resolveFullCheckpoint(path);
+                    CheckpointCache.getInstance().register(path, localPath);
+                }
             }
+            StateReadResult result = OperatorStateReader.readOperatorState(
+                localPath, operatorUid, stateName, keyFilter, limit + offset);
+
+            List<Map<String, Object>> allEntries = result.getEntries();
+            List<Map<String, Object>> paged = allEntries.subList(
+                Math.min(offset, allEntries.size()),
+                Math.min(offset + limit, allEntries.size()));
+
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("operatorUid", result.getOperatorUid());
+            data.put("stateName", stateName);
+            data.put("returnedCount", allEntries.size());
+            data.put("hasMore", allEntries.size() >= limit + offset);
+            data.put("offset", offset);
+            data.put("entryCount", paged.size());
+            data.put("columns", result.getColumns());
+            data.put("entries", paged);
+            ctx.json(ApiResponse.success(data));
         });
     }
 

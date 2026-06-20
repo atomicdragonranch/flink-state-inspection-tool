@@ -293,7 +293,7 @@ class GenericStateReaderTest {
     void isFrocksdbFormatErrorDetectsSstCorruption() {
         // Arrange
         RocksDBException ex = new RocksDBException(
-            "Corruption in SST file data");
+            "Corruption in sstable file data");
 
         // Act
         boolean result = GenericStateReader.isFrocksdbFormatError(ex);

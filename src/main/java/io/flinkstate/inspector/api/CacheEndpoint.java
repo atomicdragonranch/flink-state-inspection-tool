@@ -37,11 +37,8 @@ public final class CacheEndpoint {
 
         app.post("/api/cache/delete", ctx -> {
             JsonNode body = MAPPER.readTree(ctx.body());
-            JsonNode idNode = body.get("id");
-            if (idNode == null || idNode.asText().isEmpty()) {
-                throw new IllegalArgumentException("Missing required field: id");
-            }
-            boolean deleted = CheckpointCache.getInstance().delete(idNode.asText());
+            String id = RequestParser.requireField(body, "id");
+            boolean deleted = CheckpointCache.getInstance().delete(id);
             ctx.json(ApiResponse.success(deleted));
         });
     }

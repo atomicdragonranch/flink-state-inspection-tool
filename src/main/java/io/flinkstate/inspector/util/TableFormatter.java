@@ -1,6 +1,7 @@
 package io.flinkstate.inspector.util;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -46,6 +47,9 @@ public final class TableFormatter {
     public static String formatTable(List<String> headers, List<List<String>> rows, int maxColumnWidth) {
         if (headers == null || headers.isEmpty()) {
             return "";
+        }
+        if (rows == null) {
+            rows = Collections.emptyList();
         }
 
         int columnCount = headers.size();

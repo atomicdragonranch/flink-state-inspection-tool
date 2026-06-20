@@ -70,7 +70,7 @@ class DeserializationFilterTest {
     @Test
     void filterPatternMatchesExpectedValue() {
         // Arrange
-        String expectedPattern = "org.apache.flink.**;java.**;!*";
+        String expectedPattern = "org.apache.flink.**;java.**;[B;[I;[J;[D;[F;[S;[C;[Z;!*";
 
         // Act
         String actualPattern = FlinkStateInspector.DESERIALIZATION_FILTER_PATTERN;

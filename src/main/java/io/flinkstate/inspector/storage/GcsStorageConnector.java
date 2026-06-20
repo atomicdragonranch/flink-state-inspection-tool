@@ -11,10 +11,10 @@ import io.flinkstate.inspector.discovery.SnapshotType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.channels.Channels;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
@@ -67,14 +67,18 @@ public class GcsStorageConnector extends StorageConnector {
             try (FileInputStream fis = new FileInputStream(credentialsPath)) {
                 GoogleCredentials credentials = ServiceAccountCredentials.fromStream(fis);
                 builder.setCredentials(credentials);
-                LOG.info("Using service account credentials from {}", credentialsPath);
+                LOG.debug("Loaded service account credentials from configured path");
             } catch (IOException e) {
                 throw new IllegalStateException("Failed to load GCS credentials from " + credentialsPath, e);
             }
         }
 
         this.storageClient = builder.build().getService();
-        LOG.info("GCS client initialized" + (project != null ? " for project " + project : ""));
+        if (project != null && !project.isEmpty()) {
+            LOG.info("GCS client initialized for project {}", project);
+        } else {
+            LOG.info("GCS client initialized with default project");
+        }
     }
 
     @Override
@@ -116,8 +120,15 @@ public class GcsStorageConnector extends StorageConnector {
     public boolean validateCheckpoint(String checkpointPath) {
         String[] parsed = parseGcsUri(checkpointPath);
         String metadataKey = parsed[1].isEmpty() ? "_metadata" : parsed[1] + "/_metadata";
-        Blob blob = storageClient.get(BlobId.of(parsed[0], metadataKey));
-        return blob != null && blob.exists();
+        try {
+            Blob blob = storageClient.get(BlobId.of(parsed[0], metadataKey));
+            return blob != null && blob.exists();
+        } catch (com.google.cloud.storage.StorageException e) {
+            if (e.getCode() == 404) {
+                return false;
+            }
+            throw e;
+        }
     }
 
     @Override
@@ -128,7 +139,7 @@ public class GcsStorageConnector extends StorageConnector {
         if (blob == null || !blob.exists()) {
             throw new IOException("Metadata file not found: gs://" + parsed[0] + "/" + metadataKey);
         }
-        return new ByteArrayInputStream(blob.getContent());
+        return Channels.newInputStream(blob.reader());
     }
 
     @Override
@@ -221,6 +232,10 @@ public class GcsStorageConnector extends StorageConnector {
         List<Blob> all = new ArrayList<>();
         for (Blob blob : storageClient.list(bucket,
                 Storage.BlobListOption.prefix(prefix)).iterateAll()) {
+            if (all.size() >= MAX_GCS_OBJECTS) {
+                LOG.warn("GCS listing truncated at {} objects for prefix gs://{}/{}", MAX_GCS_OBJECTS, bucket, prefix);
+                break;
+            }
             all.add(blob);
         }
         return all;
@@ -247,6 +262,7 @@ public class GcsStorageConnector extends StorageConnector {
             }
             return 0L;
         } catch (Exception e) {
+            LOG.debug("Could not retrieve modification time for gs://{}/{}: {}", bucket, metadataKey, e.getMessage());
             return 0L;
         }
     }
@@ -261,7 +277,7 @@ public class GcsStorageConnector extends StorageConnector {
     public void close() {
         Path tempDir = tempDirRef.get();
         if (tempDir != null) {
-            LOG.info("Cleaning up temp directory: {}", tempDir);
+            LOG.debug("Cleaning up temp directory: {}", tempDir);
             try {
                 Files.walk(tempDir)
                     .sorted(Comparator.reverseOrder())

@@ -1,6 +1,8 @@
 package io.flinkstate.inspector.commands;
 
 import io.flinkstate.inspector.util.OutputHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 
 import java.util.Collections;
@@ -13,6 +15,8 @@ import java.util.Map;
     description = "Auto-discover and inspect state in a savepoint or checkpoint."
 )
 public class InspectCommand implements Runnable {
+
+    private static final Logger LOG = LoggerFactory.getLogger(InspectCommand.class);
 
     @CommandLine.Parameters(index = "0", description = "Checkpoint or savepoint path")
     private String path;
