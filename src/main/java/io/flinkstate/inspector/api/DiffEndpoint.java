@@ -89,13 +89,13 @@ public final class DiffEndpoint {
         });
     }
 
-    static Map<String, Object> computeDiff(
+    public static Map<String, Object> computeDiff(
             StateReadResult result1, StateReadResult result2,
             String operatorUid, String path1, String path2) {
         return computeDiff(result1, result2, operatorUid, path1, path2, 0, DEFAULT_LIMIT);
     }
 
-    static Map<String, Object> computeDiff(
+    public static Map<String, Object> computeDiff(
             StateReadResult result1, StateReadResult result2,
             String operatorUid, String path1, String path2,
             int offset, int limit) {
